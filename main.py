@@ -4,6 +4,7 @@ from typing import Container
 from uuid import UUID, uuid4
 from datetime import datetime 
 from src.evals.evaluation_file_protocol import EvaluationFile
+from src.config.settings import settings
 
 class GradeType(StrEnum):
     TEST_COUNT="test_count"
@@ -60,15 +61,22 @@ def _load_evals() -> list[Eval]:
     return evals
 
 def main():
+    
+    print("\n=== Welcome to Agent Eval Harness, an evaluation harness for CLI Agents == \n")
+    print("\n::Loading Evaluations::\n")
 
     evals = _load_evals()
+    eval_count = 0
 
     for eval in evals:
-       print(f"{eval.description}")
+        eval_count += 1
+        print(f"-> Loading Evalaution {eval_count}")
+        print("-----------------------------------")
+        print(f"{eval.description}")
 
         #TODO: Spin docker container 
 
-        #TODO: Call EvalauatioFie and collect score
+        #TODO: Call EvalauationFile and collect score
 
         #TODO: record score against the eval 
         
