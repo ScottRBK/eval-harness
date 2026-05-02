@@ -3,8 +3,12 @@ from dataclasses import dataclass
 from typing import Container
 from uuid import UUID, uuid4
 from datetime import datetime 
+
+import docker
+
 from src.evals.evaluation_file_protocol import EvaluationFile
 from src.config.settings import settings
+
 
 class GradeType(StrEnum):
     TEST_COUNT="test_count"
@@ -75,6 +79,14 @@ def main():
         print(f"{eval.description}")
 
         #TODO: Spin docker container 
+        client = docker.from_env()
+        output = client.containers.run(
+            image="python:3.13-slim",
+            command=["python", "-c", "print('hello from container')"], 
+            remove=True,
+        )
+        print(output.decode())
+            
 
         #TODO: Call EvalauationFile and collect score
 
