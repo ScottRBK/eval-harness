@@ -3,6 +3,15 @@ revision = 3
 requires-python = ">=3.13"
 
 [[package]]
+name = "agent-shell-py"
+version = "0.1.8"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6f/3a/1cd90adf15e2e1588e451726498402c19da83caabb55a4169c417ba5e62a/agent_shell_py-0.1.8.tar.gz", hash = "sha256:e4a1b9bc338d9606b794684921c3e807ffb4c44614d17b5c8e0dac8f75dc01f3", size = 31640, upload-time = "2026-04-20T23:14:29.992Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/29/9b/3ad6b710c4da34b38763156fe4e1ce9e62aed607ffffa9544bcaeecb6964/agent_shell_py-0.1.8-py3-none-any.whl", hash = "sha256:2d1a0264c0bb91031449dea40489e83316af48a517f1c40056d90ef29c575bbe", size = 12019, upload-time = "2026-04-20T23:14:27.7Z" },
+]
+
+[[package]]
 name = "annotated-types"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -107,6 +116,7 @@ name = "eval-harness"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "agent-shell-py" },
     { name = "docker" },
     { name = "dotenv" },
     { name = "pydantic" },
@@ -115,6 +125,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "agent-shell-py", specifier = ">=0.1.8" },
     { name = "docker", specifier = ">=7.1.0" },
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "pydantic", specifier = ">=2.13.3" },
