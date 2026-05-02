@@ -93,10 +93,16 @@ def main():
         print(f"{eval.description}")
         
         eval_mod = load_eval_class(eval.eval_file)
-        script = method_to_script(eval_mod.act)
+        arrange_script = method_to_script(eval_mod.arrange)
+        act_script= method_to_script(eval_mod.act)
+        score_script = method_to_script(eval_mod.score)
 
         docker_runner = DockerRunner(agent_type=agent_type, agent_model=agent_model)
-        docker_output = docker_runner.docker_run(script)
+        docker_output = docker_runner.docker_run(
+            arrange_script=arrange_script,
+            act_script=act_script,
+            score_script=score_script,
+        )
 
        
         #TODO: Spin docker container 

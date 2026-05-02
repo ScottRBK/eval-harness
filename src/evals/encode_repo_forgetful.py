@@ -24,5 +24,5 @@ class EncodeRepoForgetful:
         print(f"Cost: ${response.cost:.4f}")
         print(f"Session: {response.session_id}")
 
-    def score(self) -> float:
-        return 0 
+    def score(self) -> None:
+        print("0")

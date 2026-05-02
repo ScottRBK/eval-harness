@@ -1,11 +1,11 @@
 This repo is a framework i have put together to allow me to structure evaluations
 for the following Agentic CLI Tools:
 
-[x] Claude Code
-[x] Opencode
-[ ] Copilot
-[ ] Codex
-[ ] Gemini CLI 
+- [x] Claude Code
+- [x] Opencode
+- [ ] Copilot
+- [ ] Codex
+- [ ] Gemini CLI 
 
 # Getting Started
 _TODO_

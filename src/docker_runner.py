@@ -40,31 +40,56 @@ class DockerRunner:
                 raise NotImplementedError(f"Credential setup not implemented for {self._agent_type}")
 
 
-    def docker_run(self, script: str) -> str:
+    def docker_run(self,
+            arrange_script: str,
+            act_script: str,
+            score_script: str,
+    ) -> float:
 
-        output_str = ""
         client = docker.from_env()
         volumes = self._set_up_agent_volumes()
+        container = None
+
+        score = 1.0
 
         try:
-            output = client.containers.run(
+            container = client.containers.run(
                 image="eval-harness:latest",
-                command=["python", "-c", script],
+                command=["sleep", "infinity"],
                 volumes=volumes,
                 environment={
                     "AGENT_TYPE": self._agent_type.value,
                     "AGENT_MODEL": self._agent_model,
                 },
-                stderr=True,
-                remove=True,
+                detach=True,
             )
-            print(output.decode())
-            output_str = output.decode()
+
+
+            for label, script in [
+                ("arrange", arrange_script),
+                ("act", act_script),
+                ("score", score_script),
+            ]:
+                result = container.exec_run(["python", "-c", script])
+                output = result.output.decode()
+                print(f"--- {label} ---\n{output}")
+                if result.exit_code != 0:
+                    raise RuntimeError(f"{label} failed (exit {result.exit_code})")
+
+                if label == "score":
+                    score = float(output.strip().splitlines()[-1])
+
+
         finally:
+            if container is not None:
+                try:
+                    container.stop(timeout=5)
+                    container.remove()
+                except docker.errors.NotFound:
+                    pass
             for host_path in volumes:
                 shutil.rmtree(host_path)
 
-        return output_str
-
+        return score 
 
 
