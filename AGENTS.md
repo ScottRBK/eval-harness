@@ -1,7 +1,5 @@
 # AGENTS.md
 
-Guidance for AI coding assistants working in this repository.
-
 ## What this is
 
 A Python framework that runs CLI coding agents (Claude Code, OpenCode, Gemini CLI, Copilot CLI, Codex) inside Docker containers and grades their work.
@@ -14,7 +12,7 @@ docker build -t eval-harness:latest -f src/docker/Dockerfile src/docker/
 uv run main.py
 ```
 
-Rebuild the image manually after Dockerfile changes — there is no auto-rebuild.
+    Rebuild the image manually after Dockerfile changes — there is no auto-rebuild currently
 
 ## Architecture
 

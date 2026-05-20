@@ -64,7 +64,6 @@ class DockerRunner:
                 detach=True,
             )
 
-
             for label, script in [
                 ("arrange", arrange_script),
                 ("act", act_script),
@@ -78,7 +77,6 @@ class DockerRunner:
 
                 if label == "score":
                     score = float(output.strip().splitlines()[-1])
-
 
         finally:
             if container is not None:

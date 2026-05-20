@@ -67,11 +67,17 @@ def load_eval_class(eval_file: str):
     class_name = "".join(p.capitalize() for p in eval_file.split("_"))
     return getattr(module, class_name) 
 
-def method_to_script(method) -> str:
+def method_to_script(method, embedded_values: dict[str, str] | None = None ) -> str:
     src = textwrap.dedent(inspect.getsource(method))
     # need to drop the method signature just so we have the raw body
-    body = "\n".join(src.split("\n")[1:])
-    return textwrap.dedent(body)
+    body = textwrap.dedent("\n".join(src.split("\n")[1:]))
+
+    constants = ""
+    for name, value in (embedded_values or {}).items():
+        constants += f"{name} = {value!r}\n"
+
+    indented = textwrap.indent(constants + body, "    ")
+    return f"import asyncio\nasync def _main():\n{indented}\nasyncio.run(_main())"
 
 
 def main():
@@ -93,9 +99,18 @@ def main():
         print(f"{eval.description}")
         
         eval_mod = load_eval_class(eval.eval_file)
-        arrange_script = method_to_script(eval_mod.arrange)
-        act_script= method_to_script(eval_mod.act)
-        score_script = method_to_script(eval_mod.score)
+        arrange_script = method_to_script(
+            eval_mod.arrange,
+            embedded_values=getattr(eval_mod, "arrange_embedded_values", {}),
+        )
+        act_script= method_to_script(
+            eval_mod.act,
+            embedded_values=getattr(eval_mod, "act_embedded_values", {}),
+        )
+        score_script = method_to_script(
+            eval_mod.score,
+            embedded_values=getattr(eval_mod, "score_embedded_values", {}),
+        )
 
         docker_runner = DockerRunner(agent_type=agent_type, agent_model=agent_model)
         docker_output = docker_runner.docker_run(
@@ -105,12 +120,6 @@ def main():
         )
 
        
-        #TODO: Spin docker container 
-        #TODO: Call EvalauationFile and collect score
-
-        #TODO: record score against the eval 
-        
-
 if __name__ == "__main__":
     main()
 
