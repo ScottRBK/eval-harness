@@ -21,7 +21,8 @@ class EncodeRepoForgetful:
         #TODO: Configure MCP for Forgetful
         # print(subprocess.run(["uv", "tool", "install", "forgetful-ai", ], 
                              # capture_output=True, text=True,check=True).stdout[:500])
-        print(subprocess.run(["uvx", "forgetful-ai"], capture_output=True, text=True))
+        print("initiating forgetful server mcp")
+        subprocess.run(["uvx", "forgetful-ai"], capture_output=True, text=True)
         shell = AgentShell(agent_type=AgentType(os.environ["AGENT_TYPE"]))
         forgetful_mcp = MCPServerSpec(
             name="forgetful",
@@ -34,8 +35,12 @@ class EncodeRepoForgetful:
         # pause here for a bit to allow the fastembed model to download
         time.sleep(60)
 
+        print("forgetful initalised")
         print(subprocess.run(["opencode", "mcp", "list"], capture_output=True, text=True).stdout)
+
         #TODO: Clone the repo that we want to encode
+        print("cloning github repo")
+
         #TODO: Encode the repo that we want to encode
 
 
