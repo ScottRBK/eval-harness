@@ -4,7 +4,7 @@ ENCODING_PROMPT = ""
 
 class EncodeRepoForgetful:
 
-    arrange_embeded_values = {
+    arrange_embedded_values = {
     }
     act_embedded_values = {
         "ENCODING_PROMPT": read_eval_fixture(__file__, "encoding_prompt.md")
