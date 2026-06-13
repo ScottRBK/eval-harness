@@ -14,11 +14,18 @@ installing any specific service or software inside the isolated docker container
 shall be evaluated in the Score phase
 *Score* - phase responsible for evaluating the output of the task
 
-
-
-
 Important considerations for each evaluation file:
-- Any import statements must be lazy loaded as part of the 
+- Any import statements must be lazy loaded inside the methods themselves    
+- each stage can have key/value pairs passed to it using:
+    - arrange_embedded_values, act_embedded_values, score_embedded_values
+
+    Example: 
+
+    act_embedded_values = {
+        "ENCODING_PROMPT": read_eval_fixture(__file__, "encoding_prompt.md")
+    }
+
+
 """
 from typing import Protocol
 
