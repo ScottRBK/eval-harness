@@ -8,3 +8,6 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Local CA certs for TLS-intercepting proxies (Netskope, Zscaler, etc.) — never commit
+src/docker/certs/*.crt

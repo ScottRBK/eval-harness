@@ -1,13 +1,20 @@
 from src.helpers.file_helper import read_eval_fixture
 
 ENCODING_PROMPT = ""
+REPO_URL = ""
+REPO_REF = ""
+REPO_DIR = ""
 
 class EncodeRepoForgetful:
 
     arrange_embedded_values = {
+        "REPO_URL": "https://github.com/anomalyco/opencode.git",
+        "REPO_REF": "v1.17.3",
+        "REPO_DIR": "/workspace/opencode",
     }
     act_embedded_values = {
-        "ENCODING_PROMPT": read_eval_fixture(__file__, "encoding_prompt.md")
+        "ENCODING_PROMPT": read_eval_fixture(__file__, "encoding_prompt.md"),
+        "REPO_DIR": "/workspace/opencode",
     }
     score_embedded_values = {}
 
@@ -38,11 +45,11 @@ class EncodeRepoForgetful:
         print("forgetful initalised")
         print(subprocess.run(["opencode", "mcp", "list"], capture_output=True, text=True).stdout)
 
-        #TODO: Clone the repo that we want to encode
         print("cloning github repo")
-
-        #TODO: Encode the repo that we want to encode
-
+        subprocess.run(
+                ["git", "clone", "--depth", "1", "--branch", REPO_REF, REPO_URL, REPO_DIR],
+                check=True,
+              )
 
     async def act(self) -> None:
         print("just testing at this point")
@@ -52,7 +59,7 @@ class EncodeRepoForgetful:
 
         shell = AgentShell(agent_type=AgentType(os.environ["AGENT_TYPE"]))
         response = await shell.execute(
-            cwd="/workspace",
+            cwd=REPO_DIR,
             prompt=ENCODING_PROMPT,
             allowed_tools=["Read", "Glob", "Grep"],
             model=os.environ["AGENT_MODEL"],
