@@ -1,6 +1,7 @@
 import tempfile, os, shutil
 from pathlib import Path 
 import docker 
+import re
 
 from agent_shell.models.agent import AgentType
 
@@ -50,7 +51,7 @@ class DockerRunner:
         volumes = self._set_up_agent_volumes()
         container = None
 
-        score = 1.0
+        score = 0.0
 
         try:
             container = client.containers.run(
@@ -76,7 +77,10 @@ class DockerRunner:
                     raise RuntimeError(f"{label} failed (exit {result.exit_code})")
 
                 if label == "score":
-                    score = float(output.strip().splitlines()[-1])
+                    for line in reversed(output.splitlines()):
+                        if line.startswith("EVAL_SCORE="):
+                            score = float(line.removeprefix("EVAL_SCORE="))
+                            break
 
         finally:
             if container is not None:

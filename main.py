@@ -81,7 +81,7 @@ def method_to_script(method, embedded_values: dict[str, str] | None = None ) -> 
 
 
 def main():
-    
+
     print("\n=== Welcome to Agent Eval Harness, an evaluation harness for CLI Agents == \n")
     print("\n::Loading Evaluations::\n")
 
@@ -91,6 +91,8 @@ def main():
     # agent_model = "haiku"
     agent_type = AgentType.OPENCODE
     agent_model = "opencode/big-pickle"
+
+    total_score = 0 
 
     for eval in evals:
         eval_count += 1
@@ -113,7 +115,7 @@ def main():
         )
 
         docker_runner = DockerRunner(agent_type=agent_type, agent_model=agent_model)
-        docker_output = docker_runner.docker_run(
+        total_score += docker_runner.docker_run(
             arrange_script=arrange_script,
             act_script=act_script,
             score_script=score_script,

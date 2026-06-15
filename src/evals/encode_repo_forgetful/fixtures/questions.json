@@ -1,0 +1,151 @@
+{
+  "repo": "fastapi/typer",
+  "ref": "0.26.7",
+  "note": "Ground-truth multiple-choice questions verified against the source at tag 0.26.7. The 'answer' and 'source' fields are NEVER rendered into the agent prompt during act(); they are used only by score() and for human maintenance. Each answer has exactly one correct choice.",
+  "questions": [
+    {
+      "id": "q1",
+      "question": "In which module is the main `Typer` application class defined?",
+      "choices": {
+        "A": "typer/main.py",
+        "B": "typer/core.py",
+        "C": "typer/models.py",
+        "D": "typer/params.py"
+      },
+      "answer": "A",
+      "source": "typer/main.py:119 - class Typer"
+    },
+    {
+      "id": "q2",
+      "question": "When a `Typer` instance is invoked (its `__call__` method runs), what does it do to actually execute the CLI?",
+      "choices": {
+        "A": "It builds a Click command via `get_command(self)` and calls it",
+        "B": "It directly parses `sys.argv` and dispatches to the registered functions",
+        "C": "It spawns a subprocess running the Click CLI",
+        "D": "It calls `argparse.ArgumentParser.parse_args()` on the registered commands"
+      },
+      "answer": "A",
+      "source": "typer/main.py:1133 - __call__ returns get_command(self)(*args, **kwargs)"
+    },
+    {
+      "id": "q3",
+      "question": "Typer 0.26.7 vendors Click internally under `typer/_click/`. Which Click release is that vendored code adapted from?",
+      "choices": {
+        "A": "8.1.7",
+        "B": "8.3.1",
+        "C": "8.2.0",
+        "D": "7.1.2"
+      },
+      "answer": "B",
+      "source": "typer/_click/__init__.py docstring - 'Code taken and adapted from Click ... releases/tag/8.3.1'"
+    },
+    {
+      "id": "q4",
+      "question": "Which of the following is NOT a runtime dependency declared in typer 0.26.7's pyproject.toml?",
+      "choices": {
+        "A": "rich",
+        "B": "shellingham",
+        "C": "click",
+        "D": "annotated-doc"
+      },
+      "answer": "C",
+      "source": "pyproject.toml dependencies = [shellingham, rich, annotated-doc, colorama(Windows)]; click is vendored, not a dependency"
+    },
+    {
+      "id": "q5",
+      "question": "What is the purpose of the internal `Default()` function and the `DefaultPlaceholder` class?",
+      "choices": {
+        "A": "To cache parsed CLI defaults across invocations for performance",
+        "B": "To recognise when a default value has been explicitly overwritten, even if the new value is `None`",
+        "C": "To provide default values for missing environment variables",
+        "D": "To mark parameters as required when no default is supplied"
+      },
+      "answer": "B",
+      "source": "typer/models.py:170-200 - DefaultPlaceholder / Default docstrings"
+    },
+    {
+      "id": "q6",
+      "question": "In which module are the `TyperCommand` and `TyperGroup` classes defined?",
+      "choices": {
+        "A": "typer/main.py",
+        "B": "typer/models.py",
+        "C": "typer/core.py",
+        "D": "typer/cli.py"
+      },
+      "answer": "C",
+      "source": "typer/core.py:899 TyperCommand, :987 TyperGroup"
+    },
+    {
+      "id": "q7",
+      "question": "What does the top-level `typer.run(function)` helper do?",
+      "choices": {
+        "A": "Runs the function in a background thread and returns immediately",
+        "B": "Creates a `Typer(add_completion=False)` app, registers the function as a command, and invokes the app",
+        "C": "Registers the function as a callback on a global default Typer instance",
+        "D": "Validates the function's type hints and returns a generated CLI string"
+      },
+      "answer": "B",
+      "source": "typer/main.py:1891 run() - app = Typer(add_completion=False); app.command()(function); app()"
+    },
+    {
+      "id": "q8",
+      "question": "Which module provides `CliRunner`, the helper used to invoke a Typer CLI in tests in an isolated environment?",
+      "choices": {
+        "A": "typer/testing.py",
+        "B": "typer/utils.py",
+        "C": "typer/main.py",
+        "D": "typer/_click/utils.py"
+      },
+      "answer": "A",
+      "source": "typer/testing.py:128 - class CliRunner ('Based on functionality from Click')"
+    },
+    {
+      "id": "q9",
+      "question": "In which module are the public `Option` and `Argument` parameter factory functions defined?",
+      "choices": {
+        "A": "typer/models.py",
+        "B": "typer/main.py",
+        "C": "typer/core.py",
+        "D": "typer/params.py"
+      },
+      "answer": "D",
+      "source": "typer/params.py - Option (overloads at :17/:82/:145), Argument (overloads at :1007/:1063/:1117)"
+    },
+    {
+      "id": "q10",
+      "question": "What is the relationship between `OptionInfo`, `ArgumentInfo`, and `ParameterInfo` in `typer/models.py`?",
+      "choices": {
+        "A": "All three are unrelated and defined independently",
+        "B": "`OptionInfo` and `ArgumentInfo` both subclass `ParameterInfo`",
+        "C": "`ParameterInfo` subclasses both `OptionInfo` and `ArgumentInfo`",
+        "D": "`OptionInfo` subclasses `ArgumentInfo`, which subclasses `ParameterInfo`"
+      },
+      "answer": "B",
+      "source": "typer/models.py:280 ParameterInfo, :388 OptionInfo(ParameterInfo), :516 ArgumentInfo(ParameterInfo)"
+    },
+    {
+      "id": "q11",
+      "question": "The `--install-completion` / `--show-completion` options are wired up through callbacks. In which module are `install_callback` and `show_callback` defined?",
+      "choices": {
+        "A": "typer/completion.py",
+        "B": "typer/_completion_classes.py",
+        "C": "typer/_completion_shared.py",
+        "D": "typer/cli.py"
+      },
+      "answer": "A",
+      "source": "typer/completion.py:30 install_callback, :42 show_callback"
+    },
+    {
+      "id": "q12",
+      "question": "Which module is responsible for rendering Typer's Rich-formatted help output (panels, markup modes such as 'markdown' and 'rich')?",
+      "choices": {
+        "A": "typer/core.py",
+        "B": "typer/rich_utils.py",
+        "C": "typer/main.py",
+        "D": "typer/models.py"
+      },
+      "answer": "B",
+      "source": "typer/rich_utils.py - MARKUP_MODE_MARKDOWN/MARKUP_MODE_RICH, _get_rich_console, _print_options_panel"
+    }
+  ]
+}
