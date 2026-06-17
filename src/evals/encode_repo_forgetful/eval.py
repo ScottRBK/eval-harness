@@ -94,7 +94,7 @@ class EncodeRepoForgetful:
             place, keep it valid JSON change nothing else
             """,
             model=os.environ["AGENT_MODEL"],
-            disallowed_tools=["bash", "edit", "read", "web_search", "web_fetch"]
+            disallowed_tools=["bash", "web_search", "web_fetch"]
         )
         print(response.response)
         print(f"Cost: ${response.cost:.4f}")

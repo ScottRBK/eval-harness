@@ -70,14 +70,22 @@ class DockerRunner:
                 ("act", act_script),
                 ("score", score_script),
             ]:
-                result = container.exec_run(["python", "-c", script])
-                output = result.output.decode()
-                print(f"--- {label} ---\n{output}")
-                if result.exit_code != 0:
-                    raise RuntimeError(f"{label} failed (exit {result.exit_code})")
+                cmd = ["python", "-u","-c", script] # future_me: -u to ensure stdout/stderr unbffered
+                exec_id = client.api.exec_create(container.id, cmd)["Id"]
+                buffer = ""
+                print(f"--- {label} ---")
+                for chunk in client.api.exec_start(exec_id, stream=True):
+                    text = chunk.decode(errors="replace")
+                    print(text, end="", flush=True)
+                    buffer += text
+
+                exit_code = client.api.exec_inspect(exec_id)["ExitCode"]
+
+                if exit_code != 0:
+                    raise RuntimeError(f"{label} failed (exit {exit_code})")
 
                 if label == "score":
-                    for line in reversed(output.splitlines()):
+                    for line in reversed(buffer.splitlines()):
                         if line.startswith("EVAL_SCORE="):
                             score = float(line.removeprefix("EVAL_SCORE="))
                             break
