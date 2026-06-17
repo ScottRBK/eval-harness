@@ -1,4 +1,6 @@
 import inspect, textwrap, importlib
+import argparse
+import json
 from enum import StrEnum
 from dataclasses import dataclass 
 from typing import Container
@@ -20,7 +22,6 @@ class GradeType(StrEnum):
 
 @dataclass
 class Eval:
-    id: UUID
     number: int
     eval_file: str
     description: str
@@ -35,12 +36,17 @@ class AgentConfig:
 @dataclass
 class EvalExecution: 
     id: UUID 
-    eval_id: UUID 
+    eval_number: int 
     agent_config: AgentConfig
-    effort: str
     total_tokens: float
     score: float 
     date_executed: datetime
+
+
+@dataclass 
+class EvalConfig:
+    evals: list[Eval]
+    agents: list[AgentConfig]
 
 @dataclass 
 class EvalRun:
@@ -48,19 +54,21 @@ class EvalRun:
     date_executed: datetime 
     agents: list[AgentConfig]
 
-def _load_evals() -> list[Eval]:
-    evals = [] 
-    #TO:DO Load Evals from a CSV/JSON file 
-    first_eval = Eval(
-            id=uuid4(),
-            number=1,
-            eval_file="encode_repo_forgetful",
-            description="encode a repo into forgetful and then query forgetful for facts re: it",
-            run_count=3,
-            tags=["forgetful"]
+def _load_evals(eval_file: Path) -> EvalConfig:
+    
+    eval_config_str = eval_file.read_text(encoding="utf-8")
+    raw = json.loads(eval_config_str)
+
+    return EvalConfig(
+        evals=[Eval(**e) for e in raw["evals"]],
+        agents=[
+            AgentConfig(
+                agent_type=AgentType(a["agent_type"]),
+                agent_model=a["agent_model"],
+            )
+            for a in raw["agents"]
+        ],
     )
-    evals.append(first_eval)
-    return evals
 
 def load_eval_class(eval_file: str): 
     module = importlib.import_module(f"src.evals.{eval_file}")
@@ -82,45 +90,77 @@ def method_to_script(method, embedded_values: dict[str, str] | None = None ) -> 
 
 def main():
 
+    parser = argparse.ArgumentParser(
+        prog="Agent Evaluation Harness",
+        description="Harness for running evaluations against agentic harnesses",
+    ) 
+    
+    parser.add_argument(
+        "-ef", 
+        "--eval_file", 
+        help="path to file containing which evaluations to run",
+        type=Path
+    )
+
+
+    args = parser.parse_args()
+    eval_file = args.eval_file if args.eval_file else "evals.json"
+
+
     print("\n=== Welcome to Agent Eval Harness, an evaluation harness for CLI Agents == \n")
-    print("\n::Loading Evaluations::\n")
+    print(f"\n::Loading Evaluations from {eval_file}::\n")
 
-    evals = _load_evals()
-    eval_count = 0
-    # agent_type = AgentType.CLAUDE_CODE
-    # agent_model = "haiku"
-    agent_type = AgentType.OPENCODE
-    agent_model = "opencode/big-pickle"
+    evals_config = _load_evals(Path(eval_file))
+    evals = evals_config.evals
+    agents = evals_config.agents
 
-    total_score = 0 
+    for agent in agents:
+        print(f"\nAgent: {agent.agent_type}")
+        print(f"Model: {agent.agent_model}")
 
-    for eval in evals:
-        eval_count += 1
-        print(f"-> Loading Evalaution {eval_count}")
-        print("-----------------------------------")
-        print(f"{eval.description}")
-        
-        eval_mod = load_eval_class(eval.eval_file)
-        arrange_script = method_to_script(
-            eval_mod.arrange,
-            embedded_values=getattr(eval_mod, "arrange_embedded_values", {}),
-        )
-        act_script= method_to_script(
-            eval_mod.act,
-            embedded_values=getattr(eval_mod, "act_embedded_values", {}),
-        )
-        score_script = method_to_script(
-            eval_mod.score,
-            embedded_values=getattr(eval_mod, "score_embedded_values", {}),
-        )
+        agent_score = 0
+        agent_evals_executions = []
 
-        docker_runner = DockerRunner(agent_type=agent_type, agent_model=agent_model)
-        total_score += docker_runner.docker_run(
-            arrange_script=arrange_script,
-            act_script=act_script,
-            score_script=score_script,
-        )
+        for eval in evals:
+            print(f"\n-> Loading Evalaution {eval.number}")
+            print("-----------------------------------")
+            print(f"{eval.description}")
+            
+            eval_mod = load_eval_class(eval.eval_file)
+            arrange_script = method_to_script(
+                eval_mod.arrange,
+                embedded_values=getattr(eval_mod, "arrange_embedded_values", {}),
+            )
+            act_script= method_to_script(
+                eval_mod.act,
+                embedded_values=getattr(eval_mod, "act_embedded_values", {}),
+            )
+            score_script = method_to_script(
+                eval_mod.score,
+                embedded_values=getattr(eval_mod, "score_embedded_values", {}),
+            )
 
+            docker_runner = DockerRunner(agent_type=agent.agent_type, agent_model=agent.agent_model)
+            score = docker_runner.docker_run(
+                arrange_script=arrange_script,
+                act_script=act_script,
+                score_script=score_script,
+            )
+
+            eval_execution = EvalExecution(
+                id=uuid4(),
+                eval_number=eval.number,
+                agent_config=agent,
+                total_tokens=0, #TODO: Implement token counting
+                score=score,
+                date_executed=datetime.now()
+            )
+            agent_score+=score
+
+            agent_evals_executions.append(eval_execution)
+            
+        print(f"\n Agent {agent.agent_type}-{agent.agent_model} evaluation complete")
+        print(f"Total Score: {agent_score}")
        
 if __name__ == "__main__":
     main()

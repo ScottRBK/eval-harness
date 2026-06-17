@@ -1,0 +1,17 @@
+{
+    "evals": [
+        {
+            "number": 1,
+            "eval_file": "encode_repo_forgetful",
+            "description": "encode a repo into forgetful and then query forgetful for facts regarding it",
+            "run_count": 1,
+            "tags": ["forgetful"]
+        }
+    ],
+    "agents": [
+        {
+            "agent_type": "opencode",
+            "agent_model": "opencode/big-pickle"
+        }
+    ]
+}
