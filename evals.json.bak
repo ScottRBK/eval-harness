@@ -5,7 +5,7 @@
             "eval_dir": "encode_repo_forgetful",
             "description": "encode a repo into forgetful and then query forgetful for facts regarding it",
             "run_count": 1,
-            "tags": ["forgetful"]
+            "tags": ["forgetful", "python"]
         }, 
         {
             "number": 2,
@@ -13,7 +13,15 @@
             "description": "bug fixes in the python string transformation lib named inflection",
             "run_count": 1,
             "tags": ["python", "bugs"]
+        },
+        {
+            "number": 3,
+            "eval_dir": "saleor_spree_mapping",
+            "description": "create a canonical mapping between the saleor and spree solutions",
+            "run_count": 1,
+            "tags": ["mapping", "python", "ruby"]
         }
+
     ],
     "agents": [
         {

@@ -53,6 +53,7 @@ When I build my own automated tests for testing my actual code, I have used the 
 _Act_ and _Assert_ pattern, to this end I have adopted these as methods that any evaluation class must
 provide, with one exception, given that `assert` is a keyword in python, I changed that to `score`
 
+
 # Technical Notes
 
 ### Building behind a TLS-intercepting proxy

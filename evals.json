@@ -1,12 +1,13 @@
 {
     "evals": [
-        {
-            "number": 2,
-            "eval_dir": "inflection_bug_fix",
-            "description": "bug fixes in the python string transformation lib named inflection",
+       {
+            "number": 1,
+            "eval_dir": "saleor_spree_mapping",
+            "description": "create a canonical mapping between the saleor and spree solutions",
             "run_count": 1,
-            "tags": ["python", "bugs"]
+            "tags": ["mapping", "python", "ruby"]
         }
+
     ],
     "agents": [
         {

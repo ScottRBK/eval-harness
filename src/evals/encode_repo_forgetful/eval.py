@@ -129,7 +129,6 @@ class EncodeRepoForgetful:
 
             score = correct / len(scaffold["questions"]) 
             print(f"EVAL_SCORE={score:.4f}")
-
         except JSONDecodeError as e:
             print(f"Error parsing answer file: {e}")
             print("EVAL_SCORE=0.0")

@@ -1,4 +1,6 @@
-import json 
+import csv
+import io
+import json
 from pathlib import Path
 
 def read_eval_fixture(eval_file: str, relative_path: str) -> str:
@@ -7,6 +9,39 @@ def read_eval_fixture(eval_file: str, relative_path: str) -> str:
         return path.read_text(encoding="utf-8")
     except OSError as exc: 
         raise RuntimeError(f"Failed to read eval fixture: {relative_path}") from exc
+
+def read_mapping(eval_file: str, mapping_file: str, columns_to_remove: list[str] | None = None) -> str: 
+    """
+        Reads a fixture for evals that hold a cannonical data mapping, optionally remove columns from 
+        a list of column indexes
+    """
+    
+    raw_file = read_eval_fixture(eval_file, mapping_file)
+
+    if not columns_to_remove:
+        return raw_file
+
+    reader  = csv.DictReader(io.StringIO(raw_file))
+    
+    if reader.fieldnames is None: 
+        raise ValueError(f"{mapping_file} is empty or has no header rows")
+
+    missing = [c for c in columns_to_remove if c not in reader.fieldnames]
+
+    if missing:
+        raise ValueError(f"{mapping_file}: can't strip missing column(s) {missing}")
+        
+    out = io.StringIO()
+    writer = csv.DictWriter(out, fieldnames=reader.fieldnames, extrasaction="ignore", lineterminator="\n")
+    writer.writeheader() 
+
+    for row in reader:
+        for col in columns_to_remove:
+            row[col] = ""
+        writer.writerow(row)
+
+    return out.getvalue() 
+
 
 def read_questions(eval_file: str, include_answers: bool) -> str:
     """

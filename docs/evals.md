@@ -29,3 +29,44 @@ Two bugs claim a second victim via a call/doctest dependency: `pluralize`
 breaks `tableize` (which calls it), and `camelize` breaks the `underscore` doctest (whose
 docstring example calls `camelize`). This was not intentional initally but making a note here just
 for provenance.
+
+## [Saleor ↔ Spree Mapping](../src/evals/saleor_spree_mapping/)
+The agent reads two real e-commerce repos and produces a field mapping for the **Order** entity,
+Saleor (source) → Spree (target). It emits a CSV with columns `saleor_field,spree_field,transform`;
+`score()` compares it against the canonical mapping fixture (`fixtures/canonical_mapping.csv`).
+
+The ground truth was hand-built (2026-06-20) from these schema files:
+
+| System | File | Format |
+|--------|------|--------|
+| Saleor | `saleor/graphql/schema.graphql` (`type Order`, ~line 11788) | GraphQL SDL |
+| Spree  | `packages/cli/src/generated/admin-spec.json` (`schemas.Order`) | OpenAPI JSON |
+
+Scoring contract — the single CSV carries everything `score()` needs:
+
+- **19 positive rows** — must hit the correct `spree_field` AND `transform`.
+- **3 `none` rows** (`trackingClientId`, `weight`, `invoices`) — traps with no Spree counterpart;
+  must be left unmapped. Mapping them is a precision error.
+- **Any other Saleor field** is ignored (no reward, no penalty). This is how the debatable fields
+  are handled — by omission, not an explicit ignore list: the metadata family, `isPaid`,
+  vouchers/gift cards, and the tax/money sprawl (`shippingTaxRate`, `totalCharged`,
+  `undiscountedTotal`, ...) are genuinely N:M or shape-mismatched, so there is no single
+  defensible answer.
+
+The `transform` enum is keyed on the **target field's shape** (checkable against Spree's schema):
+
+| value | meaning |
+|-------|---------|
+| `direct` | target is a scalar, value copies across as-is (rename only) |
+| `transform` | target scalar but value needs conversion (enum remap, format, extract-from-object) |
+| `structural` | target is a composite (object/array) needing its own sub-mapping |
+| `none` | no target (trap) |
+
+Judgement calls worth noting:
+
+- An earlier research draft claimed Saleor `status` → Spree `state`. The live Spree admin-spec has
+  **no `state` field**; it exposes `status` (plus `fulfillment_status` / `payment_status`).
+- `id → id` is `direct` by the target-shape rule (scalar→scalar) even though Saleor's `id` is a
+  base64 Node global id; it is a deliberate discriminator vs `number` / `token`.
+- Money fields (`total`, `subtotal`, `shippingPrice`) are `transform` (target is a scalar string),
+  not `structural`, despite the Saleor source being a nested `TaxedMoney` object.
