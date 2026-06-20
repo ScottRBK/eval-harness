@@ -10,8 +10,6 @@ from pathlib import Path
 
 from agent_shell.models.agent import AgentType
 
-import docker
-
 from src.evals.evaluation_file_protocol import EvaluationFile
 from src.config.settings import settings
 from src.docker_runner import DockerRunner
@@ -23,7 +21,7 @@ class GradeType(StrEnum):
 @dataclass
 class Eval:
     number: int
-    eval_file: str
+    eval_dir: str
     description: str
     run_count: int 
     tags: list[str]
@@ -41,7 +39,6 @@ class EvalExecution:
     total_tokens: float
     score: float 
     date_executed: datetime
-
 
 @dataclass 
 class EvalConfig:
@@ -126,7 +123,7 @@ def main():
             print("-----------------------------------")
             print(f"{eval.description}")
             
-            eval_mod = load_eval_class(eval.eval_file)
+            eval_mod = load_eval_class(eval.eval_dir)
             arrange_script = method_to_script(
                 eval_mod.arrange,
                 embedded_values=getattr(eval_mod, "arrange_embedded_values", {}),

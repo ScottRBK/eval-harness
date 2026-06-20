@@ -1,5 +1,12 @@
 {
     "evals": [
+        { 
+            "number": 1,
+            "eval_dir": "encode_repo_forgetful",
+            "description": "encode a repo into forgetful and then query forgetful for facts regarding it",
+            "run_count": 1,
+            "tags": ["forgetful"]
+        }, 
         {
             "number": 2,
             "eval_dir": "inflection_bug_fix",

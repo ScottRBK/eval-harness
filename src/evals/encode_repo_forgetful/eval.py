@@ -1,3 +1,4 @@
+from json import JSONDecodeError
 from src.helpers.file_helper import read_eval_fixture, read_questions
 
 ENCODING_PROMPT = ""
@@ -118,14 +119,23 @@ class EncodeRepoForgetful:
             return
 
         correct = 0 
-        scaffold = json.loads(QUESTIONS)
+        try: 
+            scaffold = json.loads(QUESTIONS)
 
-        for q in scaffold["questions"]:
-            answer = str(answers_dict.get(q["id"], "")).strip().upper()
-            if answer == q["answer"].strip().upper():
-                correct += 1 
+            for q in scaffold["questions"]:
+                answer = str(answers_dict.get(q["id"], "")).strip().upper()
+                if answer == q["answer"].strip().upper():
+                    correct += 1 
 
-        score = correct / len(scaffold["questions"]) 
-        print(f"EVAL_SCORE={score:.4f}")
+            score = correct / len(scaffold["questions"]) 
+            print(f"EVAL_SCORE={score:.4f}")
+
+        except JSONDecodeError as e:
+            print(f"Error parsing answer file: {e}")
+            print("EVAL_SCORE=0.0")
+        except Exception as e:
+            print(f"Error scoring forgetful encode eval: {e}")
+            print("EVAL_SCORE=0.0")
+
         
     

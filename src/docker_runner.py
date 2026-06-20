@@ -63,6 +63,7 @@ class DockerRunner:
                     "AGENT_MODEL": self._agent_model,
                 },
                 detach=True,
+                name="eval_harness",
             )
 
             for label, script in [
