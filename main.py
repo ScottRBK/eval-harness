@@ -30,6 +30,7 @@ class Eval:
 class AgentConfig:
     agent_type: AgentType
     agent_model: str
+    effort: str | None = None
 
 @dataclass
 class EvalExecution: 
@@ -62,6 +63,7 @@ def _load_evals(eval_file: Path) -> EvalConfig:
             AgentConfig(
                 agent_type=AgentType(a["agent_type"]),
                 agent_model=a["agent_model"],
+                effort=a["effort"] if a["effort"] else None
             )
             for a in raw["agents"]
         ],
@@ -124,6 +126,9 @@ def main():
             print(f"{eval.description}")
             
             eval_mod = load_eval_class(eval.eval_dir)
+
+            image = getattr(eval_mod, "image", "eval-harness:latest")
+
             arrange_script = method_to_script(
                 eval_mod.arrange,
                 embedded_values=getattr(eval_mod, "arrange_embedded_values", {}),
@@ -142,6 +147,7 @@ def main():
                 arrange_script=arrange_script,
                 act_script=act_script,
                 score_script=score_script,
+                image=image,
             )
 
             eval_execution = EvalExecution(

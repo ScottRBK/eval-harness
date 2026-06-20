@@ -34,6 +34,11 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 1. Fork the repo 
 1. Replace the example eval folder with your own evals 
 1. Update evals.json 
+1. build the container(s)
+```bash
+docker build -t eval-harness:latest -f src/docker/Dockerfile src/docker/
+docker build -t eval-harness-rust:latest -f src/docker/rust/Dockerfile src/docker/
+```
 1. execute the harness 
 ```bash 
 

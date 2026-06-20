@@ -45,6 +45,7 @@ class DockerRunner:
             arrange_script: str,
             act_script: str,
             score_script: str,
+            image: str,
     ) -> float:
 
         client = docker.from_env()
@@ -55,7 +56,7 @@ class DockerRunner:
 
         try:
             container = client.containers.run(
-                image="eval-harness:latest",
+                image=image,
                 command=["sleep", "infinity"],
                 volumes=volumes,
                 environment={
