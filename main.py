@@ -63,7 +63,7 @@ def _load_evals(eval_file: Path) -> EvalConfig:
             AgentConfig(
                 agent_type=AgentType(a["agent_type"]),
                 agent_model=a["agent_model"],
-                effort=a["effort"] if a["effort"] else None
+                effort=a.get("effort") or None
             )
             for a in raw["agents"]
         ],

@@ -1,3 +1,7 @@
+"""
+This eval measures an agents ability to review two repositories and create a connical mapping between
+the two of them. 
+"""
 from src.helpers.file_helper import read_eval_fixture, read_mapping
 
 REPO_SALEOR_URL = ""

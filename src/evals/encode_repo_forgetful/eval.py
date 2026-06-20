@@ -1,3 +1,10 @@
+"""
+This eval takes clones a repository locally and then has an agent encode the repository into forgetful,
+a knowledge base that builds a semantic graph of agent observation and memories.
+
+The eval then proceeds to have the agent, answer questions about the repo without access to the code
+and just the forgetful knowledge base
+"""
 from json import JSONDecodeError
 from src.helpers.file_helper import read_eval_fixture, read_questions
 

@@ -1,4 +1,5 @@
-"""This eval sees a forked version of https://github.com/jpvanhal/inflection in which three bugs
+"""
+This eval sees a forked version of https://github.com/jpvanhal/inflection in which three bugs
  have been injected to the code that the agent must fix
 """
 REPO_URL = ""

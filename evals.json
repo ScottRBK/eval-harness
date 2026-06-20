@@ -20,8 +20,14 @@
             "description": "create a canonical mapping between the saleor and spree solutions",
             "run_count": 1,
             "tags": ["mapping", "python", "ruby"]
+        },
+        {
+            "number": 4,
+            "eval_dir": "chess_engine",
+            "description": "creates a chess engine in rust",
+            "run_count": 1,
+            "tags": ["rust", "feature"]
         }
-
     ],
     "agents": [
         {
