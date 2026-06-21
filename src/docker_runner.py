@@ -1,8 +1,7 @@
 import tempfile, os, shutil
-from pathlib import Path 
 import docker 
-import re
-
+import time
+from pathlib import Path 
 from agent_shell.models.agent import AgentType
 
 
@@ -46,13 +45,19 @@ class DockerRunner:
             act_script: str,
             score_script: str,
             image: str,
-    ) -> float:
+   ) -> tuple[float, float]:
 
         client = docker.from_env()
         volumes = self._set_up_agent_volumes()
         container = None
 
         score = 0.0
+        time_start = time.time()
+
+        try:
+            client.containers.get("eval_harness").remove(force=True)
+        except docker.errors.NotFound:
+            pass
 
         try:
             container = client.containers.run(
@@ -101,7 +106,8 @@ class DockerRunner:
                     pass
             for host_path in volumes:
                 shutil.rmtree(host_path)
+        time_taken = time.time() - time_start
 
-        return score 
+        return (score, time_taken) 
 
 

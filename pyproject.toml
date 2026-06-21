@@ -10,7 +10,13 @@ dependencies = [
     "dotenv>=0.9.9",
     "pydantic>=2.13.3",
     "pydantic-settings>=2.14.0",
+    "rich>=15.0.0",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

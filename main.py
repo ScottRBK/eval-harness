@@ -9,6 +9,8 @@ from datetime import datetime
 from pathlib import Path
 
 from agent_shell.models.agent import AgentType
+from rich.table import Table
+from rich.console import Console
 
 from src.evals.evaluation_file_protocol import EvaluationFile
 from src.config.settings import settings
@@ -39,7 +41,16 @@ class EvalExecution:
     agent_config: AgentConfig
     total_tokens: float
     score: float 
+    time_taken_seconds: float
     date_executed: datetime
+
+@dataclass
+class AgentEvalExecution:
+    agent_config: AgentConfig
+    total_score: float 
+    total_tokens: float
+    total_time_taken_seconds: float
+    evals_executions: list[EvalExecution]
 
 @dataclass 
 class EvalConfig:
@@ -112,13 +123,15 @@ def main():
     evals_config = _load_evals(Path(eval_file))
     evals = evals_config.evals
     agents = evals_config.agents
+    agent_eval_executions: list[AgentEvalExecution] = []
 
     for agent in agents:
         print(f"\nAgent: {agent.agent_type}")
         print(f"Model: {agent.agent_model}")
 
         agent_score = 0
-        agent_evals_executions = []
+        agent_time_taken = 0
+        evals_executions = []
 
         for eval in evals:
             print(f"\n-> Loading Evalaution {eval.number}")
@@ -143,7 +156,7 @@ def main():
             )
 
             docker_runner = DockerRunner(agent_type=agent.agent_type, agent_model=agent.agent_model)
-            score = docker_runner.docker_run(
+            score, time_taken = docker_runner.docker_run(
                 arrange_script=arrange_script,
                 act_script=act_script,
                 score_script=score_script,
@@ -156,14 +169,45 @@ def main():
                 agent_config=agent,
                 total_tokens=0, #TODO: Implement token counting
                 score=score,
-                date_executed=datetime.now()
+                date_executed=datetime.now(),
+                time_taken_seconds=time_taken,
             )
             agent_score+=score
-
-            agent_evals_executions.append(eval_execution)
+            agent_time_taken+=time_taken
+            evals_executions.append(eval_execution)
             
         print(f"\n Agent {agent.agent_type}-{agent.agent_model} evaluation complete")
         print(f"Total Score: {agent_score}")
+
+        agent_eval_executions.append(
+            AgentEvalExecution(
+                agent_config=agent, 
+                total_score=agent_score,
+                total_tokens=0,
+                total_time_taken_seconds=agent_time_taken,
+                evals_executions=evals_executions,
+            )
+        )
+    
+    table = Table(title="Eval Harness Agent Evaluation Results")
+    table.add_column("Agent Harness")
+    table.add_column("Model")
+    table.add_column("Total Score")
+    table.add_column("Total Tokens")
+    table.add_column("Time Taken (Seconds)")
+
+    for agent_eval in agent_eval_executions:
+        table.add_row(
+            agent_eval.agent_config.agent_type,
+            agent_eval.agent_config.agent_model,
+            str(agent_eval.total_score),
+            str(agent_eval.total_tokens),
+            str(agent_eval.total_time_taken_seconds),
+        )
+
+    console = Console()
+    console.print(table)
+
        
 if __name__ == "__main__":
     main()

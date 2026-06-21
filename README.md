@@ -56,7 +56,14 @@ should be in scope of the run as well.
 
 When I build my own automated tests for testing my actual code, I have used the popular _Arrange_, 
 _Act_ and _Assert_ pattern, to this end I have adopted these as methods that any evaluation class must
-provide, with one exception, given that `assert` is a keyword in python, I changed that to `score`
+provide, with one exception, given that `assert` is a keyword in python, I changed that to `score`.
+
+
+# Road Map
+- finish roadmap
+- polish console output 
+- Add agentic harness config files to docker container
+- eval output to log files and json or csv
 
 
 # Technical Notes
