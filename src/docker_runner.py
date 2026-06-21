@@ -1,8 +1,13 @@
 import tempfile, os, shutil
-import docker 
+import docker
 import time
-from pathlib import Path 
+from pathlib import Path
 from agent_shell.models.agent import AgentType
+
+
+# Harness-owned agent config, version-controlled. Mounted read-only into the
+# container so runs are reproducible and independent of the host's own config.
+CONFIG_ROOT = Path(__file__).parent / "docker" / "configs"
 
 
 class DockerRunner:
@@ -11,23 +16,46 @@ class DockerRunner:
     def __init__(self, agent_type: AgentType, agent_model: str):
         self._agent_type = agent_type
         self._agent_model = agent_model
+        # Throwaway dirs we create for credentials; deleted after the run.
+        self._temp_dirs: list[Path] = []
+
+    def _staged_mount(
+        self, files: list[Path], container_dir: str
+    ) -> dict[str, dict[str, str]]:
+        """Copy files into a throwaway dir and bind that dir read-write.
+
+        The agent - and agent_shell, which rewrites opencode.json to inject MCP
+        servers - can mutate the mounted files freely. The originals (host
+        secrets and the version-controlled repo config) are copies, so they are
+        never touched. The temp dir is tracked so the run can delete it after.
+        """
+        staging = Path(tempfile.mkdtemp(prefix="eval-mount-"))
+        for source in files:
+            shutil.copy2(source, staging / source.name)
+            os.chmod(staging / source.name, 0o644)
+        self._temp_dirs.append(staging)
+
+        return {str(staging): {"bind": container_dir, "mode": "rw"}}
+
 
     def _setup_claude_volumes(self) -> dict[str, dict[str, str]]:
-        host_claude = Path.home() / ".claude"
-        tmp_claude = Path(tempfile.mkdtemp(prefix="eval-claude-"))
-        shutil.copy2(host_claude / ".credentials.json", tmp_claude / ".credentials.json")
-        os.chmod(tmp_claude / ".credentials.json", 0o644)
-
-        return {str(tmp_claude): {"bind": "/home/node/.claude", "mode": "rw"}}
+        return self._staged_mount(
+            [Path.home() / ".claude" / ".credentials.json"],
+            "/home/node/.claude",
+        )
 
 
     def _setup_opencode_volumes(self) -> dict[str, dict[str, str]]:
-        host_opencode = Path.home() / ".local" / "share" / "opencode"
-        tmp_opencode = Path(tempfile.mkdtemp(prefix="eval-opencode-"))
-        shutil.copy2(host_opencode / "auth.json", tmp_opencode / "auth.json")
-        os.chmod(tmp_opencode / "auth.json", 0o644)
+        credentials = self._staged_mount(
+            [Path.home() / ".local" / "share" / "opencode" / "auth.json"],
+            "/home/node/.local/share/opencode",
+        )
+        config = self._staged_mount(
+            [CONFIG_ROOT / "opencode" / "opencode.json"],
+            "/home/node/.config/opencode",
+        )
 
-        return {str(tmp_opencode): {"bind": "/home/node/.local/share/opencode", "mode": "rw"}}
+        return credentials | config
 
 
     def _set_up_agent_volumes(self) -> dict[str, dict[str, str]]:
@@ -104,8 +132,10 @@ class DockerRunner:
                     container.remove()
                 except docker.errors.NotFound:
                     pass
-            for host_path in volumes:
-                shutil.rmtree(host_path)
+            # Delete the throwaway staging dirs (credentials + config copies).
+            # The repo's version-controlled config is the source, never these.
+            for tmp_dir in self._temp_dirs:
+                shutil.rmtree(tmp_dir, ignore_errors=True)
         time_taken = time.time() - time_start
 
         return (score, time_taken) 

@@ -83,5 +83,6 @@ docker run --rm node:24 sh -c 'echo | openssl s_client -showcerts -connect astra
 
 ```bash
 docker build -t eval-harness:latest -f src/docker/Dockerfile src/docker/
+docker build -t eval-harness-rust:latest -f src/docker/Dockerfile src/docker/
 ```
 
