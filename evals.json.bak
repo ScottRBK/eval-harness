@@ -1,0 +1,54 @@
+{
+    "evals": [
+        { 
+            "number": 1,
+            "eval_dir": "encode_repo_forgetful",
+            "description": "encode a repo into forgetful and then query forgetful for facts regarding it",
+            "run_count": 1,
+            "tags": ["forgetful", "python"]
+        }, 
+        {
+            "number": 2,
+            "eval_dir": "inflection_bug_fix",
+            "description": "bug fixes in the python string transformation lib named inflection",
+            "run_count": 1,
+            "tags": ["python", "bugs"]
+        },
+        {
+            "number": 3,
+            "eval_dir": "saleor_spree_mapping",
+            "description": "create a canonical mapping between the saleor and spree solutions",
+            "run_count": 1,
+            "tags": ["mapping", "python", "ruby"]
+        },
+        {
+            "number": 4,
+            "eval_dir": "chess_engine",
+            "description": "creates a chess engine in rust",
+            "run_count": 1,
+            "tags": ["rust", "feature"]
+        }
+    ],
+    "agents": [
+        {
+            "agent_type": "opencode",
+            "agent_model":"llama.cpp ai/qwen3.6-27b"
+        },
+        {
+            "agent_type": "opencode",
+            "agent_model":"llama.cpp ai/qwen3.6-27b-8Q"
+        },
+        {
+            "agent_type": "opencode",
+            "agent_model":"llama.cpp ai/qwen3.6-35b"
+        },
+        {
+            "agent_type": "opencode",
+            "agent_model":"llama.cpp bosman/qwen3.6-27b-mtp"
+        },
+        {
+            "agent_type": "opencode",
+            "agent_model": "llama.cpp bosman/gpt-oss-120b"
+        }
+    ]
+}

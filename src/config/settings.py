@@ -16,5 +16,7 @@ class Settings(BaseSettings):
     GEMINI_MOUNT: str = ""
     CODEX_MOUNT: str = ""
 
+    LOG_FILENAME: str = "eval_harness.log"
+    LOG_LEVEL: str = "DEBUG"
 
 settings = Settings()

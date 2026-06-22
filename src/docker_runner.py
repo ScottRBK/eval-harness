@@ -1,8 +1,11 @@
 import tempfile, os, shutil
 import docker
 import time
+import logging 
 from pathlib import Path
 from agent_shell.models.agent import AgentType
+
+logger = logging.getLogger(__name__)
 
 
 # Harness-owned agent config, version-controlled. Mounted read-only into the
@@ -108,15 +111,18 @@ class DockerRunner:
                 cmd = ["python", "-u","-c", script] # future_me: -u to ensure stdout/stderr unbffered
                 exec_id = client.api.exec_create(container.id, cmd)["Id"]
                 buffer = ""
-                print(f"--- {label} ---")
+                logger.info(f"--- {label} phase ---")
+                logger.info("container started")
                 for chunk in client.api.exec_start(exec_id, stream=True):
                     text = chunk.decode(errors="replace")
-                    print(text, end="", flush=True)
+                    #TODO: Need to implement console output inside the live display
+                    # print(text, end="", flush=True)
                     buffer += text
 
                 exit_code = client.api.exec_inspect(exec_id)["ExitCode"]
 
                 if exit_code != 0:
+                    logger.error(f"{label} failed (exit {exit_code})")
                     raise RuntimeError(f"{label} failed (exit {exit_code})")
 
                 if label == "score":
@@ -124,6 +130,12 @@ class DockerRunner:
                         if line.startswith("EVAL_SCORE="):
                             score = float(line.removeprefix("EVAL_SCORE="))
                             break
+
+                logger.debug(buffer)
+                logger.info(f"phase {label} completed")
+
+            logger.info(f"Eval Score {score}")
+
 
         finally:
             if container is not None:

@@ -1,5 +1,4 @@
 import time
-import copy 
 from uuid import uuid4
 
 from rich.live import Live

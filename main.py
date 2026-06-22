@@ -1,6 +1,8 @@
 import inspect, textwrap, importlib
 import argparse
 import json
+import logging 
+from logging.handlers import TimedRotatingFileHandler 
 from enum import StrEnum
 from typing import Container
 from uuid import UUID, uuid4
@@ -14,6 +16,7 @@ from rich.console import Console
 from src.evals.evaluation_file_protocol import EvaluationFile
 from src.config.settings import settings
 from src.docker_runner import DockerRunner
+from src.tui import LiveStatus
 from src.models import (
     Eval,
     EvalConfig,
@@ -22,9 +25,20 @@ from src.models import (
     EvalExecution,
 )
 
+handler = TimedRotatingFileHandler(
+    filename=settings.LOG_FILENAME,
+    when="midnight",
+    interval=1,
+    backupCount=3, 
+    encoding="utf-8",
+)
 
-class GradeType(StrEnum):
-    TEST_COUNT="test_count"
+handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"))
+root_logger = logging.getLogger()
+root_logger.addHandler(handler)
+root_logger.setLevel(getattr(logging, settings.LOG_LEVEL))
+
+logger = logging.getLogger(__name__)
 
 def _load_evals(eval_file: Path) -> EvalConfig:
     
@@ -75,10 +89,8 @@ def main():
         type=Path
     )
 
-
     args = parser.parse_args()
     eval_file = args.eval_file if args.eval_file else "evals.json"
-
 
     print("\n=== Welcome to Agent Eval Harness, an evaluation harness for CLI Agents == \n")
     print(f"\n::Loading Evaluations from {eval_file}::\n")
@@ -87,20 +99,18 @@ def main():
     evals = evals_config.evals
     agents = evals_config.agents
     agent_eval_executions: list[AgentEvalExecution] = []
-
+        
+    logger.info("Beginging Evaluation Run")
     for agent in agents:
-        print(f"\nAgent: {agent.agent_type}")
-        print(f"Model: {agent.agent_model}")
+        logger.info(f"Agent: {agent.agent_type}")
+        logger.info(f"Model: {agent.agent_model}")
 
         agent_score = 0
         agent_time_taken = 0
         evals_executions = []
 
         for eval in evals:
-            print(f"\n-> Loading Evalaution {eval.number}")
-            print("-----------------------------------")
-            print(f"{eval.description}")
-            
+            logger.info(f"Loading Evalaution {eval.number} - {eval.description}")
             eval_mod = load_eval_class(eval.eval_dir)
 
             image = getattr(eval_mod, "image", "eval-harness:latest")
@@ -139,8 +149,8 @@ def main():
             agent_time_taken+=time_taken
             evals_executions.append(eval_execution)
             
-        print(f"\n Agent {agent.agent_type}-{agent.agent_model} evaluation complete")
-        print(f"Total Score: {agent_score}")
+        logger.info(f"Agent {agent.agent_type}-{agent.agent_model} evaluation complete")
+        logger.info(f"Total Score: {agent_score}")
 
         agent_eval_executions.append(
             AgentEvalExecution(
