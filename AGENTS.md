@@ -10,10 +10,13 @@ inside Docker containers and grades their work.
 ```
 uv sync
 docker build -t eval-harness:latest -f src/docker/Dockerfile src/docker/
+docker build -t eval-harness-rust:latest -f src/docker/rust/Dockerfile src/docker/
 uv run main.py
 ```
 
-    Rebuild the image manually after Dockerfile changes — there is no auto-rebuild currently
+    Rebuild the image manually after Dockerfile changes — there is no auto-rebuild currently.
+    The base image must be built before eval-harness-rust (the rust image is FROM it). Evals
+    that need rust declare `image = "eval-harness-rust:latest"` on the eval class.
 
 ## Architecture
 

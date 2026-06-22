@@ -2,7 +2,6 @@ import inspect, textwrap, importlib
 import argparse
 import json
 from enum import StrEnum
-from dataclasses import dataclass 
 from typing import Container
 from uuid import UUID, uuid4
 from datetime import datetime 
@@ -15,53 +14,17 @@ from rich.console import Console
 from src.evals.evaluation_file_protocol import EvaluationFile
 from src.config.settings import settings
 from src.docker_runner import DockerRunner
+from src.models import (
+    Eval,
+    EvalConfig,
+    AgentConfig,
+    AgentEvalExecution,
+    EvalExecution,
+)
 
 
 class GradeType(StrEnum):
     TEST_COUNT="test_count"
-
-@dataclass
-class Eval:
-    number: int
-    eval_dir: str
-    description: str
-    run_count: int 
-    tags: list[str]
-
-@dataclass 
-class AgentConfig:
-    agent_type: AgentType
-    agent_model: str
-    effort: str | None = None
-
-@dataclass
-class EvalExecution: 
-    id: UUID 
-    eval_number: int 
-    agent_config: AgentConfig
-    total_tokens: float
-    score: float 
-    time_taken_seconds: float
-    date_executed: datetime
-
-@dataclass
-class AgentEvalExecution:
-    agent_config: AgentConfig
-    total_score: float 
-    total_tokens: float
-    total_time_taken_seconds: float
-    evals_executions: list[EvalExecution]
-
-@dataclass 
-class EvalConfig:
-    evals: list[Eval]
-    agents: list[AgentConfig]
-
-@dataclass 
-class EvalRun:
-    eval_runs: list[EvalExecution]
-    date_executed: datetime 
-    agents: list[AgentConfig]
 
 def _load_evals(eval_file: Path) -> EvalConfig:
     

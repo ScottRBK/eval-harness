@@ -61,9 +61,10 @@ provide, with one exception, given that `assert` is a keyword in python, I chang
 
 # Road Map
 - finish roadmap
-- polish console output 
-- Add agentic harness config files to docker container
-- eval output to log files and json or csv
+- polish console output
+- eval output to log files 
+- eval results to json
+- eval results to csv 
 
 
 # Technical Notes
@@ -83,6 +84,6 @@ docker run --rm node:24 sh -c 'echo | openssl s_client -showcerts -connect astra
 
 ```bash
 docker build -t eval-harness:latest -f src/docker/Dockerfile src/docker/
-docker build -t eval-harness-rust:latest -f src/docker/Dockerfile src/docker/
+docker build -t eval-harness-rust:latest -f src/docker/rust/Dockerfile src/docker/
 ```
 
