@@ -5,6 +5,9 @@ import logging
 from pathlib import Path
 from agent_shell.models.agent import AgentType
 
+from src.models import AgentProvisioning
+from src.config.settings import settings
+     
 logger = logging.getLogger(__name__)
 
 # Harness-owned agent config, version-controlled. Mounted read-only into the
@@ -40,16 +43,17 @@ class DockerRunner:
         return {str(staging): {"bind": container_dir, "mode": "rw"}}
 
 
-    def _setup_claude_volumes(self) -> dict[str, dict[str, str]]:
-        return self._staged_mount(
-            [Path.home() / ".claude" / ".credentials.json"],
-            "/home/node/.claude",
-        )
+    def _setup_claude_code(self) -> AgentProvisioning:
+        if not settings.CLAUDE_CODE_OAUTH_TOKEN:
+            raise RuntimeError("CLAUDE_CODE_OAUTH_TOKEN not configured (run `claude setup-token` and set env var)")
+        return AgentProvisioning(environment={"CLAUDE_CODE_OAUTH_TOKEN": settings.CLAUDE_CODE_OAUTH_TOKEN})
 
+    def _setup_opencode(self) -> AgentProvisioning:
+        return AgentProvisioning(volumes=self._setup_opencode_volumes())
 
     def _setup_opencode_volumes(self) -> dict[str, dict[str, str]]:
         credentials = self._staged_mount(
-            [Path.home() / ".local" / "share" / "opencode" / "auth.json"],
+            [Path(settings.OPENCODE_CREDENTIALS_LOC).expanduser()],
             "/home/node/.local/share/opencode",
         )
         config = self._staged_mount(
@@ -60,14 +64,14 @@ class DockerRunner:
         return credentials | config
 
 
-    def _set_up_agent_volumes(self) -> dict[str, dict[str, str]]:
+    def _provision_agent(self) -> AgentProvisioning:
         match self._agent_type:
             case AgentType.CLAUDE_CODE:
-                return self._setup_claude_volumes()
+                return self._setup_claude_code() 
             case AgentType.OPENCODE:
-                return self._setup_opencode_volumes()
+                return self._setup_opencode() 
             case _:
-                raise NotImplementedError(f"Credential setup not implemented for {self._agent_type}")
+                raise NotImplementedError(f"Agent not implemented for {self._agent_type}")
 
 
     def docker_run(self,
@@ -78,7 +82,7 @@ class DockerRunner:
    ) -> tuple[float, float]:
 
         client = docker.from_env()
-        volumes = self._set_up_agent_volumes()
+        prov = self._provision_agent()
         container = None
 
         score = 0.0
@@ -93,10 +97,11 @@ class DockerRunner:
             container = client.containers.run(
                 image=image,
                 command=["sleep", "infinity"],
-                volumes=volumes,
+                volumes=prov.volumes,
                 environment={
                     "AGENT_TYPE": self._agent_type.value,
                     "AGENT_MODEL": self._agent_model,
+                    **prov.environment,
                 },
                 detach=True,
                 name="eval_harness",
@@ -144,6 +149,7 @@ class DockerRunner:
                     container.remove()
                 except docker.errors.NotFound:
                     pass
+            client.close()
             # Delete the throwaway staging dirs (credentials + config copies).
             # The repo's version-controlled config is the source, never these.
             for tmp_dir in self._temp_dirs:

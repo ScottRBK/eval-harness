@@ -2,8 +2,7 @@ import inspect, textwrap, importlib
 import argparse
 import json
 import logging 
-from logging.handlers import TimedRotatingFileHandler 
-from uuid import uuid4
+from uuid import UUID, uuid4
 from datetime import datetime 
 from pathlib import Path
 
@@ -14,33 +13,38 @@ from src.docker_runner import DockerRunner
 from src.tui import LiveStatus
 from src.models import (
     Eval,
-    EvalConfig,
+    EvalSession,
     AgentConfig,
     AgentEvalExecution,
     EvalExecution,
 )
 
-handler = TimedRotatingFileHandler(
-    filename=settings.LOG_FILENAME,
-    when="midnight",
-    interval=1,
-    backupCount=3, 
-    encoding="utf-8",
-)
-
-handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"))
-root_logger = logging.getLogger()
-root_logger.addHandler(handler)
-root_logger.setLevel(getattr(logging, settings.LOG_LEVEL))
-
 logger = logging.getLogger(__name__)
 
-def _load_evals(eval_file: Path) -> EvalConfig:
+
+def _configure_logging(session_id: UUID) -> str:
+    log_dir = Path(settings.LOG_DIR)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / f"{datetime.now():%Y%m%d_%H%M%S}_{session_id}.log"
+
+    handler = logging.FileHandler(filename=log_path, encoding="utf-8")
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s")
+    )
+
+    root_logger = logging.getLogger()
+    root_logger.addHandler(handler)
+    root_logger.setLevel(getattr(logging, settings.LOG_LEVEL))
+
+    return str(log_path)
+
+def _load_evals(eval_file: Path, session_id: UUID) -> EvalSession:
     
     eval_config_str = eval_file.read_text(encoding="utf-8")
     raw = json.loads(eval_config_str)
 
-    return EvalConfig(
+    return EvalSession(
+        session_id=session_id,
         evals=[Eval(**e) for e in raw["evals"]],
         agents=[
             AgentConfig(
@@ -72,6 +76,12 @@ def method_to_script(method, embedded_values: dict[str, str] | None = None ) -> 
 
 def main():
 
+    session_id = uuid4()
+    log_path = _configure_logging(session_id=session_id)
+    print(f"Evaluation Session ID: {session_id}")
+    print(f"Session Log File Located At: {log_path}")
+    logger.info(f"Session {session_id} starting")
+
     parser = argparse.ArgumentParser(
         prog="Agent Evaluation Harness",
         description="Harness for running evaluations against agentic harnesses",
@@ -90,9 +100,10 @@ def main():
     print("\n=== Welcome to Agent Eval Harness, an evaluation harness for CLI Agents == \n")
     print(f"\n::Loading Evaluations from {eval_file}::\n")
 
-    evals_config = _load_evals(Path(eval_file))
-    evals = evals_config.evals
-    agents = evals_config.agents
+    eval_session = _load_evals(eval_file=Path(eval_file), session_id=session_id)
+
+    evals = eval_session.evals
+    agents = eval_session.agents
     agent_eval_executions = [
         AgentEvalExecution(
             agent_config=agent,

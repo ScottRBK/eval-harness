@@ -1,4 +1,4 @@
-from dataclasses import dataclass 
+from dataclasses import dataclass , field 
 from enum import StrEnum
 from agent_shell.models.agent import AgentType
 from uuid import UUID
@@ -10,6 +10,11 @@ class AgentEvalStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
 
+@dataclass
+class AgentProvisioning: 
+    volumes: dict[str, dict[str,str]] = field(default_factory=dict)
+    environment: dict[str, str] = field(default_factory=dict)
+ 
 @dataclass
 class Eval:
     number: int
@@ -44,7 +49,8 @@ class AgentEvalExecution:
     status: AgentEvalStatus 
 
 @dataclass 
-class EvalConfig:
+class EvalSession:
+    session_id: UUID
     evals: list[Eval]
     agents: list[AgentConfig]
 

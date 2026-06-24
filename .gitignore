@@ -17,3 +17,6 @@ src/docker/certs/*.crt
 
 # Logs
 .log
+
+#environments
+.env 

@@ -16,25 +16,17 @@
         }
     ],
     "agents": [
-                {
-                    "agent_type": "opencode",
-                    "agent_model":"llama.cpp ai/qwen3.6-27b-8Q"
-                },
-                {
-                    "agent_type": "opencode",
-                    "agent_model":"llama.cpp ai/qwen3.6-27b"
-                },
-                {
-                    "agent_type": "opencode",
-                    "agent_model":"llama.cpp bosman/qwen3.6-27b-mtp"
-                },
-                {
-                    "agent_type": "opencode",
-                    "agent_model":"llama.cpp bosman/gpt-oss-120b"
-                },
-                {
-                    "agent_type": "opencode",
-                    "agent_model":"llama.cpp ai/qwen3.6-35b"
-                }
+        {
+            "agent_type": "claude_code",
+            "agent_model":"haiku"
+        },
+        {
+            "agent_type": "claude_code",
+            "agent_model": "sonnet"
+        },
+        {
+            "agent_type": "opencode",
+            "agent_model": "opencode/big-pickle"
+        }
     ]
 }
