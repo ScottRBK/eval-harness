@@ -35,3 +35,7 @@ and builds an `AgentShell` from `agent_shell` (the unified CLI-agent wrapper ins
 
 Working: Claude Code, OpenCode. 
 Codex / Copilot CLI / Gemini CLI not yet implemented.
+
+## Repo Specific Instructions
+As a general rule, do not implement code automatically - the maintainer of this repository is a dinosaur
+and uses you for Q&A primarily and search. Only implement changes when explicitly instructed to do so.

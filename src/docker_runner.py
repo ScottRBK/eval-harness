@@ -7,7 +7,6 @@ from agent_shell.models.agent import AgentType
 
 logger = logging.getLogger(__name__)
 
-
 # Harness-owned agent config, version-controlled. Mounted read-only into the
 # container so runs are reproducible and independent of the host's own config.
 CONFIG_ROOT = Path(__file__).parent / "docker" / "configs"
@@ -125,16 +124,17 @@ class DockerRunner:
                     logger.error(f"{label} failed (exit {exit_code})")
                     raise RuntimeError(f"{label} failed (exit {exit_code})")
 
+                logger.debug(buffer)
+
                 if label == "score":
                     for line in reversed(buffer.splitlines()):
                         if line.startswith("EVAL_SCORE="):
                             score = float(line.removeprefix("EVAL_SCORE="))
+                            logger.info(f"Eval Score {score}")
                             break
 
-                logger.debug(buffer)
                 logger.info(f"phase {label} completed")
 
-            logger.info(f"Eval Score {score}")
 
 
         finally:

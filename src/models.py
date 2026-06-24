@@ -1,7 +1,14 @@
 from dataclasses import dataclass 
+from enum import StrEnum
 from agent_shell.models.agent import AgentType
 from uuid import UUID
 from datetime import datetime 
+
+class AgentEvalStatus(StrEnum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 @dataclass
 class Eval:
@@ -20,7 +27,7 @@ class AgentConfig:
 @dataclass
 class EvalExecution: 
     id: UUID 
-    eval_number: int 
+    eval: Eval
     agent_config: AgentConfig
     total_tokens: float | None = None
     score: float | None = None 
@@ -34,6 +41,7 @@ class AgentEvalExecution:
     total_tokens: float
     total_time_taken_seconds: float
     evals_executions: list[EvalExecution]
+    status: AgentEvalStatus 
 
 @dataclass 
 class EvalConfig:

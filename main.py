@@ -3,17 +3,12 @@ import argparse
 import json
 import logging 
 from logging.handlers import TimedRotatingFileHandler 
-from enum import StrEnum
-from typing import Container
-from uuid import UUID, uuid4
+from uuid import uuid4
 from datetime import datetime 
 from pathlib import Path
 
 from agent_shell.models.agent import AgentType
-from rich.table import Table
-from rich.console import Console
 
-from src.evals.evaluation_file_protocol import EvaluationFile
 from src.config.settings import settings
 from src.docker_runner import DockerRunner
 from src.tui import LiveStatus
@@ -98,88 +93,70 @@ def main():
     evals_config = _load_evals(Path(eval_file))
     evals = evals_config.evals
     agents = evals_config.agents
-    agent_eval_executions: list[AgentEvalExecution] = []
+    agent_eval_executions = [
+        AgentEvalExecution(
+            agent_config=agent,
+            total_score=0,
+            total_tokens=0,
+            total_time_taken_seconds=0,
+            evals_executions=[
+                EvalExecution(id=uuid4(), eval=e, agent_config=agent) for e in evals
+            ],
+            status="pending",
+        ) for agent in agents 
+    ]
         
     logger.info("Beginging Evaluation Run")
-    for agent in agents:
-        logger.info(f"Agent: {agent.agent_type}")
-        logger.info(f"Model: {agent.agent_model}")
+    with LiveStatus(agent_eval_execs=agent_eval_executions) as live_status:
+        for aee in agent_eval_executions:
+            logger.info(f"Agent: {aee.agent_config.agent_type}")
+            logger.info(f"Model: {aee.agent_config.agent_model}")
 
-        agent_score = 0
-        agent_time_taken = 0
-        evals_executions = []
+            aee.status = "processing"
+            live_status.update(agent_eval_execs=agent_eval_executions)
 
-        for eval in evals:
-            logger.info(f"Loading Evalaution {eval.number} - {eval.description}")
-            eval_mod = load_eval_class(eval.eval_dir)
+            for eval_exec in aee.evals_executions:
+                logger.info(f"Loading Evalaution {eval_exec.eval.number} - {eval_exec.eval.description}")
+                eval_mod = load_eval_class(eval_exec.eval.eval_dir)
 
-            image = getattr(eval_mod, "image", "eval-harness:latest")
+                image = getattr(eval_mod, "image", "eval-harness:latest")
 
-            arrange_script = method_to_script(
-                eval_mod.arrange,
-                embedded_values=getattr(eval_mod, "arrange_embedded_values", {}),
-            )
-            act_script= method_to_script(
-                eval_mod.act,
-                embedded_values=getattr(eval_mod, "act_embedded_values", {}),
-            )
-            score_script = method_to_script(
-                eval_mod.score,
-                embedded_values=getattr(eval_mod, "score_embedded_values", {}),
-            )
+                arrange_script = method_to_script(
+                    eval_mod.arrange,
+                    embedded_values=getattr(eval_mod, "arrange_embedded_values", {}),
+                )
+                act_script= method_to_script(
+                    eval_mod.act,
+                    embedded_values=getattr(eval_mod, "act_embedded_values", {}),
+                )
+                score_script = method_to_script(
+                    eval_mod.score,
+                    embedded_values=getattr(eval_mod, "score_embedded_values", {}),
+                )
 
-            docker_runner = DockerRunner(agent_type=agent.agent_type, agent_model=agent.agent_model)
-            score, time_taken = docker_runner.docker_run(
-                arrange_script=arrange_script,
-                act_script=act_script,
-                score_script=score_script,
-                image=image,
-            )
+                docker_runner = DockerRunner(
+                    agent_type=aee.agent_config.agent_type, 
+                    agent_model=aee.agent_config.agent_model,
+                )
 
-            eval_execution = EvalExecution(
-                id=uuid4(),
-                eval_number=eval.number,
-                agent_config=agent,
-                total_tokens=0, #TODO: Implement token counting
-                score=score,
-                date_executed=datetime.now(),
-                time_taken_seconds=time_taken,
-            )
-            agent_score+=score
-            agent_time_taken+=time_taken
-            evals_executions.append(eval_execution)
-            
-        logger.info(f"Agent {agent.agent_type}-{agent.agent_model} evaluation complete")
-        logger.info(f"Total Score: {agent_score}")
+                score, time_taken = docker_runner.docker_run(
+                    arrange_script=arrange_script,
+                    act_script=act_script,
+                    score_script=score_script,
+                    image=image,
+                )
 
-        agent_eval_executions.append(
-            AgentEvalExecution(
-                agent_config=agent, 
-                total_score=agent_score,
-                total_tokens=0,
-                total_time_taken_seconds=agent_time_taken,
-                evals_executions=evals_executions,
-            )
-        )
-    
-    table = Table(title="Eval Harness Agent Evaluation Results")
-    table.add_column("Agent Harness")
-    table.add_column("Model")
-    table.add_column("Total Score")
-    table.add_column("Total Tokens")
-    table.add_column("Time Taken (Seconds)")
-
-    for agent_eval in agent_eval_executions:
-        table.add_row(
-            agent_eval.agent_config.agent_type,
-            agent_eval.agent_config.agent_model,
-            str(agent_eval.total_score),
-            str(agent_eval.total_tokens),
-            str(agent_eval.total_time_taken_seconds),
-        )
-
-    console = Console()
-    console.print(table)
+                eval_exec.score = score
+                aee.total_score += score 
+                eval_exec.time_taken_seconds = time_taken 
+                aee.total_time_taken_seconds += time_taken 
+                eval_exec.date_executed = datetime.now() 
+                live_status.update(agent_eval_execs=agent_eval_executions)
+                
+            aee.status = "completed"
+            live_status.update(agent_eval_execs=agent_eval_executions)
+            logger.info(f"Agent {aee.agent_config.agent_type}-{aee.agent_config.agent_model} evaluation complete")
+            logger.info(f"Total Score: {aee.total_score}")
 
        
 if __name__ == "__main__":
