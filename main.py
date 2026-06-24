@@ -21,11 +21,10 @@ from src.models import (
 
 logger = logging.getLogger(__name__)
 
-
 def _configure_logging(session_id: UUID) -> str:
     log_dir = Path(settings.LOG_DIR)
     log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / f"{datetime.now():%Y%m%d_%H%M%S}_{session_id}.log"
+    log_path = log_dir / f"eval_harness_{datetime.now():%Y%m%d_%H%M%S}_{session_id}.log"
 
     handler = logging.FileHandler(filename=log_path, encoding="utf-8")
     handler.setFormatter(
@@ -35,6 +34,9 @@ def _configure_logging(session_id: UUID) -> str:
     root_logger = logging.getLogger()
     root_logger.addHandler(handler)
     root_logger.setLevel(getattr(logging, settings.LOG_LEVEL))
+
+    logging.getLogger("docker").setLevel(settings.DOCKER_LOG_LEVEL)
+    logging.getLogger("urllib3").setLevel(settings.URLLIB3_LOG_LEVEL)
 
     return str(log_path)
 
@@ -75,6 +77,7 @@ def method_to_script(method, embedded_values: dict[str, str] | None = None ) -> 
 
 
 def main():
+    print("\n=== Welcome to Agent Eval Harness, an evaluation harness for CLI Agents == \n")
 
     session_id = uuid4()
     log_path = _configure_logging(session_id=session_id)
@@ -97,7 +100,6 @@ def main():
     args = parser.parse_args()
     eval_file = args.eval_file if args.eval_file else "evals.json"
 
-    print("\n=== Welcome to Agent Eval Harness, an evaluation harness for CLI Agents == \n")
     print(f"\n::Loading Evaluations from {eval_file}::\n")
 
     eval_session = _load_evals(eval_file=Path(eval_file), session_id=session_id)

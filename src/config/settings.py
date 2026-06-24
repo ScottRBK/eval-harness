@@ -14,5 +14,7 @@ class Settings(BaseSettings):
 
     LOG_DIR: str = "logs"
     LOG_LEVEL: str = "DEBUG"
+    DOCKER_LOG_LEVEL: str = "WARNING"
+    URLLIB3_LOG_LEVEL: str = "WARNING"
 
 settings = Settings()

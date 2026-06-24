@@ -117,11 +117,18 @@ class DockerRunner:
                 buffer = ""
                 logger.info(f"--- {label} phase ---")
                 logger.info("container started")
-                for chunk in client.api.exec_start(exec_id, stream=True):
-                    text = chunk.decode(errors="replace")
-                    #TODO: Need to implement console output inside the live display
-                    # print(text, end="", flush=True)
-                    buffer += text
+                stream = client.api.exec_start(exec_id, stream=True)
+
+                try:
+                    for chunk in stream:
+                        text = chunk.decode(errors="replace")
+                        #TODO: Need to implement console output inside the live display
+                        # print(text, end="", flush=True)
+                        buffer += text
+                except Exception as e:
+                    logger.error(f"Error streaming docker response: {e}")
+                finally:
+                    stream._response.close()
 
                 exit_code = client.api.exec_inspect(exec_id)["ExitCode"]
 
@@ -129,7 +136,7 @@ class DockerRunner:
                     logger.error(f"{label} failed (exit {exit_code})")
                     raise RuntimeError(f"{label} failed (exit {exit_code})")
 
-                logger.debug(buffer)
+                logger.debug(f"docker output: {buffer}")
 
                 if label == "score":
                     for line in reversed(buffer.splitlines()):
@@ -149,7 +156,6 @@ class DockerRunner:
                     container.remove()
                 except docker.errors.NotFound:
                     pass
-            client.close()
             # Delete the throwaway staging dirs (credentials + config copies).
             # The repo's version-controlled config is the source, never these.
             for tmp_dir in self._temp_dirs:
