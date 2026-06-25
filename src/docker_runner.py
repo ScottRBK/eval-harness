@@ -144,7 +144,7 @@ class DockerRunner:
                             try:
                                 score = float(raw)
                             except ValueError as e:
-                                raise RuntimeError("Malformed score line {line!r}: "
+                                raise RuntimeError(f"Malformed score line {line!r}: "
                                     "expected EVAL_SCORE=<float>"
                                 ) from e
                             logger.info(f"Eval Score {score}")
