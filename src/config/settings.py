@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     COPILOT_MOUNT: str = ""
     CODEX_MOUNT: str = ""
 
-    LOG_DIR: str = "logs"
+    OUTPUT_DIR: str = "output"
     LOG_LEVEL: str = "DEBUG"
     DOCKER_LOG_LEVEL: str = "WARNING"
     URLLIB3_LOG_LEVEL: str = "WARNING"

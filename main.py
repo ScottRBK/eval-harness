@@ -3,13 +3,13 @@ import json
 import logging
 import sys
 from uuid import UUID, uuid4
-from datetime import datetime
 from pathlib import Path
 
 from agent_shell.models.agent import AgentType
 
 from src.config.settings import settings
 from src.evals_engine import run_session
+from src.logging_config import configure_logging
 from src.tui import LiveStatus
 from src.models import (
     Eval,
@@ -21,25 +21,6 @@ from src.models import (
 )
 
 logger = logging.getLogger(__name__)
-
-def _configure_logging(session_id: UUID) -> str:
-    log_dir = Path(settings.LOG_DIR)
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / f"eval_harness_{datetime.now():%Y%m%d_%H%M%S}_{session_id}.log"
-
-    handler = logging.FileHandler(filename=log_path, encoding="utf-8")
-    handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s")
-    )
-
-    root_logger = logging.getLogger()
-    root_logger.addHandler(handler)
-    root_logger.setLevel(getattr(logging, settings.LOG_LEVEL))
-
-    logging.getLogger("docker").setLevel(settings.DOCKER_LOG_LEVEL)
-    logging.getLogger("urllib3").setLevel(settings.URLLIB3_LOG_LEVEL)
-
-    return str(log_path)
 
 def _load_evals(eval_file: Path, session_id: UUID) -> EvalSession:
     
@@ -63,9 +44,9 @@ def main():
     print("\n=== Welcome to Agent Eval Harness, an evaluation harness for CLI Agents == \n")
 
     session_id = uuid4()
-    log_path = _configure_logging(session_id=session_id)
+    run_dir = configure_logging(session_id=session_id)
     print(f"Evaluation Session ID: {session_id}")
-    print(f"Session Log File Located At: {log_path}")
+    print(f"Session Output Directory: {run_dir}")
     logger.info(f"Session {session_id} starting")
 
     parser = argparse.ArgumentParser(
@@ -108,6 +89,7 @@ def main():
             agent_eval_executions,
             on_update=lambda: live_status.update(agent_eval_execs=agent_eval_executions),
             max_workers=settings.MAX_AGENT_CONCURRENCY,
+            run_dir=run_dir,
         )
 
     completed = [

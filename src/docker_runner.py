@@ -7,8 +7,6 @@ from agent_shell.models.agent import AgentType
 
 from src.models import AgentProvisioning
 from src.config.settings import settings
-     
-logger = logging.getLogger(__name__)
 
 # Harness-owned agent config, version-controlled. Mounted read-only into the
 # container so runs are reproducible and independent of the host's own config.
@@ -18,9 +16,11 @@ CONFIG_ROOT = Path(__file__).parent / "docker" / "configs"
 class DockerRunner:
 
 
-    def __init__(self, agent_type: AgentType, agent_model: str):
+    def __init__(self, agent_type: AgentType, agent_model: str, logger: logging.Logger | None = None):
         self._agent_type = agent_type
         self._agent_model = agent_model
+        # Per-agent logger when the engine injects one; module logger otherwise.
+        self._log = logger or logging.getLogger(__name__)
         # Throwaway dirs we create for credentials; deleted after the run.
         self._temp_dirs: list[Path] = []
 
@@ -115,8 +115,8 @@ class DockerRunner:
                 cmd = ["python", "-u","-c", script] # future_me: -u to ensure stdout/stderr unbffered
                 exec_id = client.api.exec_create(container.id, cmd)["Id"]
                 buffer = ""
-                logger.info(f"--- {label} phase ---")
-                logger.info("container started")
+                self._log.info(f"--- {label} phase ---")
+                self._log.info("container started")
                 stream = client.api.exec_start(exec_id, stream=True)
 
                 try:
@@ -125,17 +125,17 @@ class DockerRunner:
                         #TODO: Need to implement console output inside the live display ... well maybe
                         buffer += text
                 except Exception as e:
-                    logger.error(f"Error streaming docker response: {e}")
+                    self._log.error(f"Error streaming docker response: {e}")
                 finally:
                     stream._response.close()
 
                 exit_code = client.api.exec_inspect(exec_id)["ExitCode"]
 
                 if exit_code != 0:
-                    logger.error(f"{label} failed (exit {exit_code})")
+                    self._log.error(f"{label} failed (exit {exit_code})")
                     raise RuntimeError(f"{label} failed (exit {exit_code})")
 
-                logger.debug(f"docker output: {buffer}")
+                self._log.debug(f"docker output: {buffer}")
 
                 if label == "score":
                     for line in reversed(buffer.splitlines()):
@@ -147,10 +147,10 @@ class DockerRunner:
                                 raise RuntimeError(f"Malformed score line {line!r}: "
                                     "expected EVAL_SCORE=<float>"
                                 ) from e
-                            logger.info(f"Eval Score {score}")
+                            self._log.info(f"Eval Score {score}")
                             break
 
-                logger.info(f"phase {label} completed")
+                self._log.info(f"phase {label} completed")
 
         finally:
             if container is not None:

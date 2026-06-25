@@ -7,21 +7,26 @@ from datetime import datetime
 
 from src.models import AgentEvalExecution
 from src.docker_runner import DockerRunner
+from src.logging_config import agent_logger
 
 logger = logging.getLogger(__name__)
 
 
-def run_agent(aee: AgentEvalExecution, progress: Queue):
+def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None):
 
-    logger.info(f"Agent: {aee.agent_config.agent_type}")
-    logger.info(f"Model: {aee.agent_config.agent_model}")
+    # Per-agent logger when running a real session; the module logger otherwise
+    # (keeps unit tests filesystem-free). Records still reach session.log.
+    log = agent_logger(aee.agent_config, run_dir) if run_dir else logger
+
+    log.info(f"Agent: {aee.agent_config.agent_type}")
+    log.info(f"Model: {aee.agent_config.agent_model}")
 
     aee.status = "processing"
     progress.put("update")
 
     try:
         for eval_exec in aee.evals_executions:
-            logger.info(f"Loading Evalaution {eval_exec.eval.number} - {eval_exec.eval.description}")
+            log.info(f"Loading Evalaution {eval_exec.eval.number} - {eval_exec.eval.description}")
             eval_mod = _load_eval_class(eval_exec.eval.eval_dir)
 
             image = getattr(eval_mod, "image", "eval-harness:latest")
@@ -45,6 +50,7 @@ def run_agent(aee: AgentEvalExecution, progress: Queue):
             docker_runner = DockerRunner(
                 agent_type=aee.agent_config.agent_type,
                 agent_model=aee.agent_config.agent_model,
+                logger=log,
             )
 
             score, time_taken = docker_runner.docker_run(
@@ -62,8 +68,8 @@ def run_agent(aee: AgentEvalExecution, progress: Queue):
             progress.put("update")
     except Exception:
         # Mark the agent FAILED, surface it to the live display, then let the
-        # exception propagate so main's future.result() re-raises on the main thread.
-        logger.exception(f"Agent {aee.agent_config.agent_type}-{aee.agent_config.agent_model} failed")
+        # exception propagate so run_session can collect it off the future.
+        log.exception(f"Agent {aee.agent_config.agent_type}-{aee.agent_config.agent_model} failed")
         aee.status = "failed"
         progress.put("update")
         raise
@@ -76,6 +82,7 @@ def run_session(
     agent_eval_executions: list[AgentEvalExecution],
     on_update: Callable[[], None],
     max_workers: int,
+    run_dir=None,
 ) -> list[AgentEvalExecution]:
     """Run every agent concurrently, one worker thread per agent.
 
@@ -91,7 +98,7 @@ def run_session(
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
-            pool.submit(run_agent, aee, progress): aee
+            pool.submit(run_agent, aee, progress, run_dir): aee
             for aee in agent_eval_executions
         }
 

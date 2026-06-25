@@ -78,7 +78,7 @@ def fake_runner(monkeypatch):
         recorder = SimpleNamespace(constructed=[], calls=[], results=list(results), idx=0)
         lock = threading.Lock()
 
-        def _factory(agent_type, agent_model):
+        def _factory(agent_type, agent_model, logger=None):
             recorder.constructed.append((agent_type, agent_model))
 
             def _docker_run(arrange_script, act_script, score_script, image):
