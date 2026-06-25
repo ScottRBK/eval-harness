@@ -199,6 +199,18 @@ class TestDockerRun:
         # Assert
         assert score == 0.0
 
+    def test_malformed_score_line_raises_friendly_error(
+        self, claude_token, make_docker_client
+    ):
+        # Arrange — an EVAL_SCORE= line that isn't a number
+        client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=pass", 0)])
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
+
+        # Act / Assert — friendly error naming the offending line, not a raw ValueError
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            with pytest.raises(RuntimeError, match="EVAL_SCORE=pass"):
+                runner.docker_run("a", "b", "c", "img")
+
     def test_nonzero_phase_exit_raises_runtimeerror(
         self, claude_token, make_docker_client
     ):

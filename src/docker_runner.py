@@ -140,13 +140,17 @@ class DockerRunner:
                 if label == "score":
                     for line in reversed(buffer.splitlines()):
                         if line.startswith("EVAL_SCORE="):
-                            score = float(line.removeprefix("EVAL_SCORE="))
+                            raw = line.removeprefix("EVAL_SCORE=")
+                            try:
+                                score = float(raw)
+                            except ValueError as e:
+                                raise RuntimeError("Malformed score line {line!r}: "
+                                    "expected EVAL_SCORE=<float>"
+                                ) from e
                             logger.info(f"Eval Score {score}")
                             break
 
                 logger.info(f"phase {label} completed")
-
-
 
         finally:
             if container is not None:
