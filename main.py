@@ -58,9 +58,9 @@ def _load_evals(eval_file: Path, session_id: UUID) -> EvalSession:
         ],
     )
 
-def load_eval_class(eval_file: str): 
-    module = importlib.import_module(f"src.evals.{eval_file}")
-    class_name = "".join(p.capitalize() for p in eval_file.split("_"))
+def load_eval_class(eval_dir: str): 
+    module = importlib.import_module(f"src.evals.{eval_dir}")
+    class_name = "".join(p.capitalize() for p in eval_dir.split("_"))
     return getattr(module, class_name) 
 
 def method_to_script(method, embedded_values: dict[str, str] | None = None ) -> str:
@@ -134,6 +134,9 @@ def main():
 
                 image = getattr(eval_mod, "image", "eval-harness:latest")
 
+                # Small reminder - we split per phase as to ensure we do not get a leak of certain 
+                # embedded values in to the container, for example answers used in the score phase 
+                # in bytes on the command line 
                 arrange_script = method_to_script(
                     eval_mod.arrange,
                     embedded_values=getattr(eval_mod, "arrange_embedded_values", {}),

@@ -122,8 +122,7 @@ class DockerRunner:
                 try:
                     for chunk in stream:
                         text = chunk.decode(errors="replace")
-                        #TODO: Need to implement console output inside the live display
-                        # print(text, end="", flush=True)
+                        #TODO: Need to implement console output inside the live display ... well maybe
                         buffer += text
                 except Exception as e:
                     logger.error(f"Error streaming docker response: {e}")

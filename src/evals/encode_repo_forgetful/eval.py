@@ -13,6 +13,7 @@ REPO_URL = ""
 REPO_REF = ""
 REPO_DIR = ""
 QUESTIONS= ""
+ANSWERS = ""
 
 class EncodeRepoForgetful:
 
@@ -26,7 +27,7 @@ class EncodeRepoForgetful:
         "QUESTIONS":  read_questions(__file__, False)
     }
     score_embedded_values = {
-        "QUESTIONS": read_questions(__file__, True)
+        "ANSWERS": read_questions(__file__, True)
     }
 
     async def arrange(self) -> None:
@@ -127,7 +128,7 @@ class EncodeRepoForgetful:
 
         correct = 0 
         try: 
-            scaffold = json.loads(QUESTIONS)
+            scaffold = json.loads(ANSWERS)
 
             for q in scaffold["questions"]:
                 answer = str(answers_dict.get(q["id"], "")).strip().upper()
