@@ -19,6 +19,11 @@
         {
             "agent_type": "claude_code",
             "agent_model":"haiku"
+        },
+        {
+            "agent_type": "claude_code",
+            "agent_model":"sonnet"
         }
+
     ]
 }

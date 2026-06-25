@@ -104,7 +104,7 @@ class DockerRunner:
                     **prov.environment,
                 },
                 detach=True,
-                name="eval_harness",
+                name=f"eval_harness_{self._agent_type.value}_{self._agent_model}",
             )
 
             for label, script in [

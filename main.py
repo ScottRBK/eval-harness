@@ -1,21 +1,22 @@
-import inspect, textwrap, importlib
 import argparse
 import json
-import logging 
+import logging
+import sys
 from uuid import UUID, uuid4
-from datetime import datetime 
+from datetime import datetime
 from pathlib import Path
 
 from agent_shell.models.agent import AgentType
 
 from src.config.settings import settings
-from src.docker_runner import DockerRunner
+from src.evals_engine import run_session
 from src.tui import LiveStatus
 from src.models import (
     Eval,
     EvalSession,
     AgentConfig,
     AgentEvalExecution,
+    AgentEvalStatus,
     EvalExecution,
 )
 
@@ -57,24 +58,6 @@ def _load_evals(eval_file: Path, session_id: UUID) -> EvalSession:
             for a in raw["agents"]
         ],
     )
-
-def load_eval_class(eval_dir: str): 
-    module = importlib.import_module(f"src.evals.{eval_dir}")
-    class_name = "".join(p.capitalize() for p in eval_dir.split("_"))
-    return getattr(module, class_name) 
-
-def method_to_script(method, embedded_values: dict[str, str] | None = None ) -> str:
-    src = textwrap.dedent(inspect.getsource(method))
-    # need to drop the method signature just so we have the raw body
-    body = textwrap.dedent("\n".join(src.split("\n")[1:]))
-
-    constants = ""
-    for name, value in (embedded_values or {}).items():
-        constants += f"{name} = {value!r}\n"
-
-    indented = textwrap.indent(constants + body, "    ")
-    return f"import asyncio\nasync def _main():\n{indented}\nasyncio.run(_main())"
-
 
 def main():
     print("\n=== Welcome to Agent Eval Harness, an evaluation harness for CLI Agents == \n")
@@ -118,63 +101,29 @@ def main():
             status="pending",
         ) for agent in agents 
     ]
-        
+
     logger.info("Beginging Evaluation Run")
     with LiveStatus(agent_eval_execs=agent_eval_executions) as live_status:
-        for aee in agent_eval_executions:
-            logger.info(f"Agent: {aee.agent_config.agent_type}")
-            logger.info(f"Model: {aee.agent_config.agent_model}")
+        failed = run_session(
+            agent_eval_executions,
+            on_update=lambda: live_status.update(agent_eval_execs=agent_eval_executions),
+            max_workers=settings.MAX_AGENT_CONCURRENCY,
+        )
 
-            aee.status = "processing"
-            live_status.update(agent_eval_execs=agent_eval_executions)
+    completed = [
+        aee for aee in agent_eval_executions
+        if aee.status == AgentEvalStatus.COMPLETED
+    ]
+    summary = f"{len(completed)} agent(s) completed, {len(failed)} failed"
+    logger.info(f"Evaluation run finished: {summary}")
+    print(f"\n{summary}")
+    for aee in failed:
+        print(f"  FAILED: {aee.agent_config.agent_type}-{aee.agent_config.agent_model}")
 
-            for eval_exec in aee.evals_executions:
-                logger.info(f"Loading Evalaution {eval_exec.eval.number} - {eval_exec.eval.description}")
-                eval_mod = load_eval_class(eval_exec.eval.eval_dir)
-
-                image = getattr(eval_mod, "image", "eval-harness:latest")
-
-                # Small reminder - we split per phase as to ensure we do not get a leak of certain 
-                # embedded values in to the container, for example answers used in the score phase 
-                # in bytes on the command line 
-                arrange_script = method_to_script(
-                    eval_mod.arrange,
-                    embedded_values=getattr(eval_mod, "arrange_embedded_values", {}),
-                )
-                act_script= method_to_script(
-                    eval_mod.act,
-                    embedded_values=getattr(eval_mod, "act_embedded_values", {}),
-                )
-                score_script = method_to_script(
-                    eval_mod.score,
-                    embedded_values=getattr(eval_mod, "score_embedded_values", {}),
-                )
-
-                docker_runner = DockerRunner(
-                    agent_type=aee.agent_config.agent_type, 
-                    agent_model=aee.agent_config.agent_model,
-                )
-
-                score, time_taken = docker_runner.docker_run(
-                    arrange_script=arrange_script,
-                    act_script=act_script,
-                    score_script=score_script,
-                    image=image,
-                )
-
-                eval_exec.score = score
-                aee.total_score += score 
-                eval_exec.time_taken_seconds = time_taken 
-                aee.total_time_taken_seconds += time_taken 
-                eval_exec.date_executed = datetime.now() 
-                live_status.update(agent_eval_execs=agent_eval_executions)
-                
-            aee.status = "completed"
-            live_status.update(agent_eval_execs=agent_eval_executions)
-            logger.info(f"Agent {aee.agent_config.agent_type}-{aee.agent_config.agent_model} evaluation complete")
-            logger.info(f"Total Score: {aee.total_score}")
-
-       
+    if failed:
+        sys.exit(1)
+               
+                   
 if __name__ == "__main__":
     main()
 
