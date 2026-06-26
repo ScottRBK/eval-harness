@@ -170,11 +170,3 @@ and agent API calls will fail certificate verification. Drop your proxy's CA cer
 docker run --rm node:24 sh -c 'echo | openssl s_client -showcerts -connect astral.sh:443 2>/dev/null' \
   | awk '/BEGIN CERTIFICATE/{n++} n>=2' > src/docker/certs/proxy-ca.crt
 ```
-
-### Docker rebuild command 
-
-```bash
-docker build -t eval-harness:latest -f src/docker/Dockerfile src/docker/
-docker build -t eval-harness-rust:latest -f src/docker/rust/Dockerfile src/docker/
-```
-
