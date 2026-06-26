@@ -177,11 +177,11 @@ class TestDockerRun:
 
         # Act
         with mock.patch("src.docker_runner.docker.from_env", return_value=client):
-            score, elapsed = runner.docker_run("a", "b", "c", "img")
+            result = runner.docker_run("a", "b", "c", "img")
 
         # Assert
-        assert score == 0.85
-        assert elapsed >= 0
+        assert result.score == 0.85
+        assert result.time_taken_seconds >= 0
 
     def test_score_defaults_to_zero_without_eval_score_line(
         self, claude_token, make_docker_client
@@ -194,10 +194,52 @@ class TestDockerRun:
 
         # Act
         with mock.patch("src.docker_runner.docker.from_env", return_value=client):
-            score, _ = runner.docker_run("a", "b", "c", "img")
+            result = runner.docker_run("a", "b", "c", "img")
 
         # Assert
-        assert score == 0.0
+        assert result.score == 0.0
+        assert result.total_tokens == 0
+
+    def test_sums_total_token_markers_across_all_phases(
+        self, claude_token, make_docker_client
+    ):
+        # Arrange
+        client = make_docker_client(
+            [
+                ("arrange\nEVAL_TOTAL_TOKENS=10", 0),
+                ("act\nEVAL_TOTAL_TOKENS=20\nEVAL_TOTAL_TOKENS=5", 0),
+                ("EVAL_TOTAL_TOKENS=7\nEVAL_SCORE=1.0", 0),
+            ]
+        )
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            result = runner.docker_run("a", "b", "c", "img")
+
+        # Assert
+        assert result.total_tokens == 42
+
+    def test_ignores_malformed_total_token_markers(
+        self, claude_token, make_docker_client, caplog
+    ):
+        # Arrange
+        client = make_docker_client(
+            [
+                ("EVAL_TOTAL_TOKENS=not-a-number", 0),
+                ("EVAL_TOTAL_TOKENS=7", 0),
+                ("EVAL_SCORE=1.0", 0),
+            ]
+        )
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            result = runner.docker_run("a", "b", "c", "img")
+
+        # Assert
+        assert result.total_tokens == 7
+        assert "Ignoring malformed token marker line" in caplog.text
 
     def test_malformed_score_line_raises_friendly_error(
         self, claude_token, make_docker_client
@@ -249,10 +291,10 @@ class TestDockerRun:
 
         # Act
         with mock.patch("src.docker_runner.docker.from_env", return_value=client):
-            score, _ = runner.docker_run("a", "b", "c", "img")
+            result = runner.docker_run("a", "b", "c", "img")
 
         # Assert — streaming error is swallowed, every stream is closed, run finishes
-        assert score == 1.0
+        assert result.score == 1.0
         assert all(s._response.close.called for s in client._streams)
 
     def test_stale_container_removed_before_run(
@@ -282,7 +324,7 @@ class TestDockerRun:
 
         # Act
         with mock.patch("src.docker_runner.docker.from_env", return_value=client):
-            score, _ = runner.docker_run("a", "b", "c", "img")
+            result = runner.docker_run("a", "b", "c", "img")
 
         # Assert — NotFound swallowed, run proceeds normally
-        assert score == 0.5
+        assert result.score == 0.5

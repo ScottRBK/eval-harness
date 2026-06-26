@@ -13,7 +13,9 @@ The following agent harnesses are currently supported:
 
 A lot of this is possible thanks to the agentic harness abstraction repository 
 [agent-shell](https://github.com/ScottRBK/agent-shell), check it out if you have use cases where you 
-want to seemlessly switch between agentic harness for a particular worklow.
+want to seemlessly switch between agentic harness for a particular worklow that you invoke via code 
+or scripts. It was originally inspired for auto-research type loops but I've come to find many an 
+application for it.
 
 ## Example Eval Patterns
 This harness ships with some [example evals](docs/evals.md), as I come up with different types of 
@@ -54,8 +56,12 @@ uv run main.py
 ```
 
 # Harness Architecture
+
+![Eval Harness Architecture](docs/images/eval_harness_architecture.png)
+
 The harness is structured in a way that there is an evaluation protocol, any evaluation must implement
 the same methods within the protocol.
+
 The harness ingests an evaluation file (the default is [evals.json](evals.json)), which determines
 which evaluations are in scope of the evaluation run, and also which agent harness/model combinations
 should be in scope of the run as well.

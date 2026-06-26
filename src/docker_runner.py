@@ -7,15 +7,29 @@ from agent_shell.models.agent import AgentType
 
 from uuid import UUID
 
-from src.models import AgentProvisioning
+from src.models import AgentProvisioning, DockerRunResult
 from src.config.settings import settings
 from src.helpers.naming import safe_name
 
 _SESSION_LABEL = "com.eval-harness.session"
+_TOKEN_MARKER = "EVAL_TOTAL_TOKENS="
 
 # Harness-owned agent config, version-controlled. Mounted read-only into the
 # container so runs are reproducible and independent of the host's own config.
 CONFIG_ROOT = Path(__file__).parent / "docker" / "configs"
+
+
+def _parse_total_tokens(buffer: str, log: logging.Logger) -> int:
+    total_tokens = 0
+    for line in buffer.splitlines():
+        if not line.startswith(_TOKEN_MARKER):
+            continue
+        raw = line.removeprefix(_TOKEN_MARKER).strip()
+        try:
+            total_tokens += int(raw)
+        except ValueError:
+            log.warning("Ignoring malformed token marker line: %r", line)
+    return total_tokens
 
 
 class DockerRunner:
@@ -90,13 +104,14 @@ class DockerRunner:
             act_script: str,
             score_script: str,
             image: str,
-   ) -> tuple[float, float]:
+   ) -> DockerRunResult:
 
         client = docker.from_env()
         prov = self._provision_agent()
         container = None
 
         score = 0.0
+        total_tokens = 0
         time_start = time.time()
         container_name = safe_name(f"eval_harness_{self._agent_type.value}_{self._agent_model}")
 
@@ -164,6 +179,8 @@ class DockerRunner:
                     )
                     raise RuntimeError(f"{label} failed (exit {exit_code})")
 
+                total_tokens += _parse_total_tokens(buffer, self._log)
+
                 if label == "score":
                     for line in reversed(buffer.splitlines()):
                         if line.startswith("EVAL_SCORE="):
@@ -192,6 +209,8 @@ class DockerRunner:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
         time_taken = time.time() - time_start
 
-        return (score, time_taken) 
-
-
+        return DockerRunResult(
+            score=score,
+            time_taken_seconds=time_taken,
+            total_tokens=total_tokens,
+        )

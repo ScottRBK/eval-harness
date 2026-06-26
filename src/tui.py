@@ -38,6 +38,8 @@ class LiveStatus:
         table.add_column("Model")
         table.add_column("Status")
         table.add_column("Evals Count")
+        table.add_column("Total Time (s)")
+        table.add_column("Total Tokens")
         table.add_column("Total Score")
 
         for agent_eval_exec in self._agent_eval_execs:
@@ -52,6 +54,8 @@ class LiveStatus:
                 f"{agent_eval_exec.agent_config.agent_model}", 
                 status_cell,
                 f"{evals_completed} / {len(agent_eval_exec.evals_executions)}",
+                f"{agent_eval_exec.total_time_taken_seconds}",
+                f"{agent_eval_exec.total_tokens}",
                 f"{agent_eval_exec.total_score}",
             )
 

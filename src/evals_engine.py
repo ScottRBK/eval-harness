@@ -12,6 +12,28 @@ from src.logging_config import agent_logger
 
 logger = logging.getLogger(__name__)
 
+_AGENT_SHELL_TOKEN_TRACKER = """
+try:
+    from agent_shell.shell import AgentShell as _EvalHarnessAgentShell
+except Exception:
+    _EvalHarnessAgentShell = None
+
+if _EvalHarnessAgentShell is not None:
+    _eval_harness_original_execute = _EvalHarnessAgentShell.execute
+
+    async def _eval_harness_tracked_execute(self, *args, **kwargs):
+        response = await _eval_harness_original_execute(self, *args, **kwargs)
+        tokens = response.output_tokens
+        try:
+            tokens = int(tokens or 0)
+        except (TypeError, ValueError):
+            tokens = 0
+        print(f"EVAL_TOTAL_TOKENS={tokens}")
+        return response
+
+    _EvalHarnessAgentShell.execute = _eval_harness_tracked_execute
+"""
+
 
 def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None, session_id: UUID | None = None):
 
@@ -55,17 +77,19 @@ def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None, session_id
                 session_id=session_id,
             )
 
-            score, time_taken = docker_runner.docker_run(
+            run_result = docker_runner.docker_run(
                 arrange_script=arrange_script,
                 act_script=act_script,
                 score_script=score_script,
                 image=image,
             )
 
-            eval_exec.score = score
-            aee.total_score += score
-            eval_exec.time_taken_seconds = time_taken
-            aee.total_time_taken_seconds += time_taken
+            eval_exec.score = run_result.score
+            aee.total_score += run_result.score
+            eval_exec.total_tokens = run_result.total_tokens
+            aee.total_tokens += run_result.total_tokens
+            eval_exec.time_taken_seconds = run_result.time_taken_seconds
+            aee.total_time_taken_seconds += run_result.time_taken_seconds
             eval_exec.date_executed = datetime.now()
             progress.put("update")
 
@@ -78,7 +102,8 @@ def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None, session_id
         raise
 
     logger.info(
-        f"Agent Evaluation Run Complete - total score {aee.total_score} - time taken {aee.total_time_taken_seconds}"
+        f"Agent Evaluation Run Complete - total score {aee.total_score} "
+        f"- time taken {aee.total_time_taken_seconds} - total tokens {aee.total_tokens}"
     )
     aee.status = AgentEvalStatus.COMPLETED
     progress.put("update")
@@ -135,5 +160,5 @@ def _method_to_script(method, embedded_values: dict[str, str] | None = None) -> 
     for name, value in (embedded_values or {}).items():
         constants += f"{name} = {value!r}\n"
 
-    indented = textwrap.indent(constants + body, "    ")
+    indented = textwrap.indent(constants + _AGENT_SHELL_TOKEN_TRACKER + body, "    ")
     return f"import asyncio\nasync def _main():\n{indented}\nasyncio.run(_main())"

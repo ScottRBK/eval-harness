@@ -19,6 +19,12 @@ class AgentEvalStatus(StrEnum):
 class AgentProvisioning: 
     volumes: dict[str, dict[str,str]] = field(default_factory=dict)
     environment: dict[str, str] = field(default_factory=dict)
+
+@dataclass
+class DockerRunResult:
+    score: float
+    time_taken_seconds: float
+    total_tokens: int
  
 @dataclass
 class Eval:
@@ -39,7 +45,7 @@ class EvalExecution:
     id: UUID 
     eval: Eval
     agent_config: AgentConfig
-    total_tokens: float | None = None
+    total_tokens: int | None = None
     score: float | None = None 
     time_taken_seconds: float | None = None 
     date_executed: datetime | None = None
@@ -48,7 +54,7 @@ class EvalExecution:
 class AgentEvalExecution:
     agent_config: AgentConfig
     total_score: float 
-    total_tokens: float
+    total_tokens: int
     total_time_taken_seconds: float
     evals_executions: list[EvalExecution]
     status: AgentEvalStatus 
@@ -64,5 +70,4 @@ class EvalRun:
     eval_runs: list[EvalExecution]
     date_executed: datetime 
     agents: list[AgentConfig]
-
 

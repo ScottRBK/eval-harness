@@ -26,6 +26,7 @@ from src.models import (
     AgentConfig,
     AgentEvalExecution,
     AgentEvalStatus,
+    DockerRunResult,
     Eval,
     EvalExecution,
 )
@@ -68,7 +69,8 @@ def fake_runner(monkeypatch):
     """Install a recording stand-in for ``src.evals_engine.DockerRunner``.
 
     Call the returned factory with a list of per-eval results, where each result
-    is either a ``(score, time_taken)`` tuple or an ``Exception`` to raise. The
+    is either a ``(score, time_taken)``, ``(score, time_taken, total_tokens)``
+    tuple or an ``Exception`` to raise. The
     returned recorder exposes ``constructed`` (the (agent_type, agent_model) each
     runner was built with) and ``calls`` (the kwargs each ``docker_run`` saw).
     Index advancement is locked so the recorder is safe under concurrent agents.
@@ -102,6 +104,21 @@ def fake_runner(monkeypatch):
                     recorder.idx += 1
                 if isinstance(result, Exception):
                     raise result
+                if isinstance(result, tuple):
+                    if len(result) == 2:
+                        score, time_taken = result
+                        return DockerRunResult(
+                            score=score,
+                            time_taken_seconds=time_taken,
+                            total_tokens=0,
+                        )
+                    if len(result) == 3:
+                        score, time_taken, total_tokens = result
+                        return DockerRunResult(
+                            score=score,
+                            time_taken_seconds=time_taken,
+                            total_tokens=total_tokens,
+                        )
                 return result
 
             return SimpleNamespace(docker_run=_docker_run)
@@ -191,6 +208,19 @@ class TestRunAgent:
         # Assert
         assert aee.total_time_taken_seconds == 5.5
         assert [e.time_taken_seconds for e in aee.evals_executions] == [2.0, 3.5]
+
+    def test_accumulates_total_tokens(self, fake_runner, fake_eval_loading):
+        # Arrange
+        fake_eval_loading()
+        fake_runner([(1.0, 2.0, 10), (1.0, 3.5, 15)])
+        aee = _make_aee(["e1", "e2"])
+
+        # Act
+        run_agent(aee, Queue())
+
+        # Assert
+        assert aee.total_tokens == 25
+        assert [e.total_tokens for e in aee.evals_executions] == [10, 15]
 
     def test_stamps_date_executed_on_each_eval(self, fake_runner, fake_eval_loading):
         # Arrange
@@ -504,6 +534,15 @@ class TestMethodToScript:
 
         # Assert
         assert "ANSWER = 'secret'" in script
+
+    def test_injects_agent_shell_token_tracker(self):
+        # Act
+        script = _method_to_script(_sample_method)
+
+        # Assert
+        assert "AgentShell as _EvalHarnessAgentShell" in script
+        assert "EVAL_TOTAL_TOKENS=" in script
+        assert "response.output_tokens" in script
 
 
 # --------------------------------------------------------------------------- #
