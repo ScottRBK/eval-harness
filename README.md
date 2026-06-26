@@ -57,7 +57,7 @@ uv run main.py
 
 # Harness Architecture
 
-![Eval Harness Architecture](docs/images/eval_harness_architecture1.png)
+![Eval Harness Architecture](docs/images/eval_harness_architecture.png)
 
 The harness is structured in a way that there is an evaluation protocol, any evaluation must implement
 the same methods within the protocol.
