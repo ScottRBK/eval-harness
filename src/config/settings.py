@@ -17,6 +17,6 @@ class Settings(BaseSettings):
     DOCKER_LOG_LEVEL: str = "WARNING"
     URLLIB3_LOG_LEVEL: str = "WARNING"
 
-    MAX_AGENT_CONCURRENCY: int = 2 
+    MAX_AGENT_CONCURRENCY: int = 4 
 
 settings = Settings()

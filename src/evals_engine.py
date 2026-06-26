@@ -14,17 +14,17 @@ logger = logging.getLogger(__name__)
 
 def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None):
 
-    # Per-agent logger when running a real session; the module logger otherwise
-    # (keeps unit tests filesystem-free). Records still reach session.log.
-    log = agent_logger(aee.agent_config, run_dir) if run_dir else logger
-
-    log.info(f"Agent: {aee.agent_config.agent_type}")
-    log.info(f"Model: {aee.agent_config.agent_model}")
-
-    aee.status = "processing"
-    progress.put("update")
+    log = logger  # fallback so the except block always has a valid logger
 
     try:
+        log = agent_logger(aee.agent_config, run_dir) if run_dir else logger
+
+        log.info(f"Agent: {aee.agent_config.agent_type}")
+        log.info(f"Model: {aee.agent_config.agent_model}")
+
+        aee.status = "processing"
+        progress.put("update")
+
         for eval_exec in aee.evals_executions:
             log.info(f"Loading Evalaution {eval_exec.eval.number} - {eval_exec.eval.description}")
             eval_mod = _load_eval_class(eval_exec.eval.eval_dir)
@@ -74,6 +74,9 @@ def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None):
         progress.put("update")
         raise
 
+    logger.info(
+        f"Agent Evaluation Run Complete - total score {aee.total_score} - time taken {aee.total_time_taken_seconds}"
+    )
     aee.status = "completed"
     progress.put("update")
 
@@ -85,14 +88,6 @@ def run_session(
     run_dir=None,
 ) -> list[AgentEvalExecution]:
     """Run every agent concurrently, one worker thread per agent.
-
-    ``on_update`` is invoked on the calling thread once per progress event an
-    agent emits — that is where the live display is refreshed. The display is
-    injected as a callback so the engine never imports the TUI.
-
-    A failing agent is marked FAILED (by ``run_agent``) and collected rather than
-    re-raised, so one agent blowing up never sinks the rest of the session. The
-    agents that failed are returned; their exceptions are logged here.
     """
     progress: Queue = Queue()
 
@@ -102,7 +97,6 @@ def run_session(
             for aee in agent_eval_executions
         }
 
-        # Drain progress events until every agent is done and the queue is empty.
         while not all(f.done() for f in futures) or not progress.empty():
             try:
                 progress.get(timeout=0.1)

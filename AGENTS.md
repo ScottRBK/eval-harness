@@ -31,6 +31,11 @@ New agents are added by implementing `_setup_<agent>_volumes` and adding a case 
 The harness passes `AGENT_TYPE` and `AGENT_MODEL` to the container via env vars; `act()` reads them 
 and builds an `AgentShell` from `agent_shell` (the unified CLI-agent wrapper installed in the image).
 
+
+# Logs
+Each evaluation run has its own output folder (specified in `settings.py` with the variable `OUTPUT_DIR`)
+There is a `session.log` as well as a per agent log file.
+
 ## Status
 
 Working: Claude Code, OpenCode. 
@@ -39,3 +44,5 @@ Codex / Copilot CLI / Gemini CLI not yet implemented.
 ## Repo Specific Instructions
 As a general rule, do not implement code automatically - the maintainer of this repository is a dinosaur
 and uses you for Q&A primarily and search. Only implement changes when explicitly instructed to do so.
+
+

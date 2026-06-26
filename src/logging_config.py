@@ -13,6 +13,7 @@ from pathlib import Path
 from datetime import datetime
 
 from src.config.settings import settings
+from src.helpers.naming import safe_name
 
 _FMT = logging.Formatter(
     "%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
@@ -49,7 +50,9 @@ def agent_logger(cfg, run_dir) -> logging.Logger:
     label = agent_label(cfg)
     log = logging.getLogger(f"eval.agent.{label}")
     if not log.handlers:  # idempotent if the agent's worker thread is reused
-        handler = logging.FileHandler(Path(run_dir) / f"{label}.log", encoding="utf-8")
+        # model names can contain '/' or spaces (e.g. "llama.cpp ai/qwen3.6"),
+        # which would break the path; safe_name collapses them to '_'.
+        handler = logging.FileHandler(Path(run_dir) / f"{safe_name(label)}.log", encoding="utf-8")
         handler.setFormatter(_FMT)
         log.addHandler(handler)
     return log

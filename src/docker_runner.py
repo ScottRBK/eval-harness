@@ -7,6 +7,7 @@ from agent_shell.models.agent import AgentType
 
 from src.models import AgentProvisioning
 from src.config.settings import settings
+from src.helpers.naming import safe_name
 
 # Harness-owned agent config, version-controlled. Mounted read-only into the
 # container so runs are reproducible and independent of the host's own config.
@@ -87,9 +88,10 @@ class DockerRunner:
 
         score = 0.0
         time_start = time.time()
+        container_name = safe_name(f"eval_harness_{self._agent_type.value}_{self._agent_model}")
 
         try:
-            client.containers.get("eval_harness").remove(force=True)
+            client.containers.get(container_name).remove(force=True)
         except docker.errors.NotFound:
             pass
 
@@ -104,7 +106,7 @@ class DockerRunner:
                     **prov.environment,
                 },
                 detach=True,
-                name=f"eval_harness_{self._agent_type.value}_{self._agent_model}",
+                name=container_name,
             )
 
             for label, script in [
@@ -114,16 +116,24 @@ class DockerRunner:
             ]:
                 cmd = ["python", "-u","-c", script] # future_me: -u to ensure stdout/stderr unbffered
                 exec_id = client.api.exec_create(container.id, cmd)["Id"]
-                buffer = ""
                 self._log.info(f"--- {label} phase ---")
                 self._log.info("container started")
                 stream = client.api.exec_start(exec_id, stream=True)
 
+                buffer = ""
+                pending = ""
                 try:
                     for chunk in stream:
                         text = chunk.decode(errors="replace")
                         #TODO: Need to implement console output inside the live display ... well maybe
+                        self._log.info(f"docker output: {text}")
                         buffer += text
+                        pending += text 
+                        while "\n" in pending:
+                            line, pending = pending.split("\n", 1)
+                            self._log.info(f"[{label}] {line}")
+                    if pending.strip():
+                        self._log.info(f"[{label}] {pending}")
                 except Exception as e:
                     self._log.error(f"Error streaming docker response: {e}")
                 finally:
@@ -132,10 +142,12 @@ class DockerRunner:
                 exit_code = client.api.exec_inspect(exec_id)["ExitCode"]
 
                 if exit_code != 0:
-                    self._log.error(f"{label} failed (exit {exit_code})")
+                    self._log.error(
+                        f"{label} failed (exit {exit_code})\n"
+                        f"--- container output ---\n{buffer}\n"
+                        f"--- end container output ---"
+                    )
                     raise RuntimeError(f"{label} failed (exit {exit_code})")
-
-                self._log.debug(f"docker output: {buffer}")
 
                 if label == "score":
                     for line in reversed(buffer.splitlines()):

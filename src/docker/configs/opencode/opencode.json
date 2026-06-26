@@ -23,6 +23,13 @@
                         "context": 120000,
                     "output": 65536
                     }
+                },
+                "ornith-1.0" : {
+                    "name": "ornith-1.0",
+                    "limit": {
+                        "context": 200000,
+                        "output": 128000
+                    }
                 }
        }
     },

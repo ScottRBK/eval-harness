@@ -269,8 +269,8 @@ class TestDockerRun:
         with mock.patch("src.docker_runner.docker.from_env", return_value=client):
             runner.docker_run("a", "b", "c", "img")
 
-        # Assert
-        client.containers.get.assert_called_once_with("eval_harness")
+        # Assert — container name is per-agent so parallel runs don't collide
+        client.containers.get.assert_called_once_with("eval_harness_claude_code_model")
         stale.remove.assert_called_once_with(force=True)
 
     def test_missing_stale_container_is_ignored(
