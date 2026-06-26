@@ -5,9 +5,13 @@ import logging
 from pathlib import Path
 from agent_shell.models.agent import AgentType
 
+from uuid import UUID
+
 from src.models import AgentProvisioning
 from src.config.settings import settings
 from src.helpers.naming import safe_name
+
+_SESSION_LABEL = "com.eval-harness.session"
 
 # Harness-owned agent config, version-controlled. Mounted read-only into the
 # container so runs are reproducible and independent of the host's own config.
@@ -16,14 +20,20 @@ CONFIG_ROOT = Path(__file__).parent / "docker" / "configs"
 
 class DockerRunner:
 
-
-    def __init__(self, agent_type: AgentType, agent_model: str, logger: logging.Logger | None = None):
+    def __init__(
+        self,
+        agent_type: AgentType,
+        agent_model: str,
+        logger: logging.Logger | None = None,
+        session_id: UUID | None = None,
+    ):
         self._agent_type = agent_type
         self._agent_model = agent_model
         # Per-agent logger when the engine injects one; module logger otherwise.
         self._log = logger or logging.getLogger(__name__)
         # Throwaway dirs we create for credentials; deleted after the run.
         self._temp_dirs: list[Path] = []
+        self._session_id = session_id
 
     def _staged_mount(
         self, files: list[Path], container_dir: str
@@ -95,6 +105,10 @@ class DockerRunner:
         except docker.errors.NotFound:
             pass
 
+        labels = {}
+        if self._session_id is not None:
+            labels[_SESSION_LABEL] = str(self._session_id)
+
         try:
             container = client.containers.run(
                 image=image,
@@ -107,6 +121,7 @@ class DockerRunner:
                 },
                 detach=True,
                 name=container_name,
+                labels=labels,
             )
 
             for label, script in [

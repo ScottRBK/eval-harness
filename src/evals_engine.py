@@ -4,15 +4,16 @@ from queue import Queue, Empty
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from uuid import UUID
 
-from src.models import AgentEvalExecution
+from src.models import AgentEvalExecution, AgentEvalStatus
 from src.docker_runner import DockerRunner
 from src.logging_config import agent_logger
 
 logger = logging.getLogger(__name__)
 
 
-def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None):
+def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None, session_id: UUID | None = None):
 
     log = logger  # fallback so the except block always has a valid logger
 
@@ -22,7 +23,7 @@ def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None):
         log.info(f"Agent: {aee.agent_config.agent_type}")
         log.info(f"Model: {aee.agent_config.agent_model}")
 
-        aee.status = "processing"
+        aee.status = AgentEvalStatus.PROCESSING
         progress.put("update")
 
         for eval_exec in aee.evals_executions:
@@ -51,6 +52,7 @@ def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None):
                 agent_type=aee.agent_config.agent_type,
                 agent_model=aee.agent_config.agent_model,
                 logger=log,
+                session_id=session_id,
             )
 
             score, time_taken = docker_runner.docker_run(
@@ -66,18 +68,19 @@ def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None):
             aee.total_time_taken_seconds += time_taken
             eval_exec.date_executed = datetime.now()
             progress.put("update")
+
     except Exception:
         # Mark the agent FAILED, surface it to the live display, then let the
         # exception propagate so run_session can collect it off the future.
         log.exception(f"Agent {aee.agent_config.agent_type}-{aee.agent_config.agent_model} failed")
-        aee.status = "failed"
+        aee.status = AgentEvalStatus.FAILED
         progress.put("update")
         raise
 
     logger.info(
         f"Agent Evaluation Run Complete - total score {aee.total_score} - time taken {aee.total_time_taken_seconds}"
     )
-    aee.status = "completed"
+    aee.status = AgentEvalStatus.COMPLETED
     progress.put("update")
 
 
@@ -86,6 +89,7 @@ def run_session(
     on_update: Callable[[], None],
     max_workers: int,
     run_dir=None,
+    session_id: UUID | None = None,
 ) -> list[AgentEvalExecution]:
     """Run every agent concurrently, one worker thread per agent.
     """
@@ -93,7 +97,7 @@ def run_session(
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
-            pool.submit(run_agent, aee, progress, run_dir): aee
+            pool.submit(run_agent, aee, progress, run_dir, session_id): aee
             for aee in agent_eval_executions
         }
 

@@ -1,7 +1,9 @@
 import argparse
 import json
 import logging
+import signal
 import sys
+import docker
 from uuid import UUID, uuid4
 from pathlib import Path
 
@@ -21,6 +23,22 @@ from src.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+_SESSION_LABEL = "com.eval-harness.session"
+
+
+def _cleanup_eval_containers(signum, frame):
+    """Kill all eval harness containers on SIGINT/SIGTERM."""
+    try:
+        client = docker.from_env()
+        for container in client.containers.list(
+            filters={"label": _SESSION_LABEL}, all=True
+        ):
+            container.remove(force=True)
+            logger.info(f"Cleaned up container {container.name}")
+    except Exception as e:
+        logger.error(f"Container cleanup failed: {e}")
+    raise KeyboardInterrupt()
 
 def _load_evals(eval_file: Path, session_id: UUID) -> EvalSession:
     
@@ -48,6 +66,9 @@ def main():
     print(f"Evaluation Session ID: {session_id}")
     print(f"Session Output Directory: {run_dir}")
     logger.info(f"Session {session_id} starting")
+
+    signal.signal(signal.SIGINT, _cleanup_eval_containers)
+    signal.signal(signal.SIGTERM, _cleanup_eval_containers)
 
     parser = argparse.ArgumentParser(
         prog="Agent Evaluation Harness",
@@ -90,6 +111,7 @@ def main():
             on_update=lambda: live_status.update(agent_eval_execs=agent_eval_executions),
             max_workers=settings.MAX_AGENT_CONCURRENCY,
             run_dir=run_dir,
+            session_id=session_id,
         )
 
     completed = [
