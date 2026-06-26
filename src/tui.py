@@ -1,9 +1,11 @@
 import time
 from uuid import uuid4
 
+from rich import print 
 from rich.live import Live
 from rich.table import Table
 from rich.spinner import Spinner 
+from rich.panel import Panel
 
 from src.models import (
     AgentConfig,
@@ -12,6 +14,12 @@ from src.models import (
     EvalExecution,
     AgentEvalStatus,
 )
+
+
+def print_introduction(intro_text: str):
+    print(Panel(intro_text, title="Welcome to Agent Eval Harness, an evaluation harness for CLI Agents"))
+
+
 class LiveStatus:
     def __init__(
             self, 

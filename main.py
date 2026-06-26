@@ -12,7 +12,7 @@ from agent_shell.models.agent import AgentType
 from src.config.settings import settings
 from src.evals_engine import run_session
 from src.logging_config import configure_logging
-from src.tui import LiveStatus
+from src.tui import LiveStatus, print_introduction
 from src.repositories.evaluation_results import (
     EvaluationResultsService,
     JsonEvaluationResultsRepository,
@@ -107,12 +107,9 @@ def _configure_args_parse() -> argparse.ArgumentParser:
 
 
 def main():
-    print("\n=== Welcome to Agent Eval Harness, an evaluation harness for CLI Agents == \n")
 
     session_id = uuid4()
     run_dir = configure_logging(session_id=session_id)
-    print(f"Evaluation Session ID: {session_id}")
-    print(f"Session Output Directory: {run_dir}")
     logger.info(f"Session {session_id} starting")
 
     signal.signal(signal.SIGINT, _cleanup_eval_containers)
@@ -124,10 +121,12 @@ def main():
     eval_file = args.eval_file if args.eval_file else "evals.json"
 
     results_service = _get_results_service(result_format=args.results_format, run_dir=run_dir) 
-
-    print(f"\n::Loading Evaluations from {eval_file}::\n")
-    print(f"::Results will be exported to {args.results_format}")
-
+    
+    intro_text = f"Evaluation Session ID: {session_id}\n"
+    intro_text += f"Session Output Directory: {run_dir}\n"
+    intro_text += f"Loading Evaluations from {eval_file}\n" 
+    intro_text += f"Results will be exported to {args.results_format}"""
+    print_introduction(intro_text=intro_text)
     eval_session = _load_evals(eval_file=Path(eval_file), session_id=session_id)
 
     evals = eval_session.evals
