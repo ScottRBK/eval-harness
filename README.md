@@ -72,7 +72,7 @@ provide, with one exception, given that `assert` is a keyword in python, I chang
 
 ## The Anatomy of an Eval
 Each evaluation is it's own folder containing the python logic and any test fixtures that are required
-as part of the evaluation itself. 
+as part of the evaluation itself.
 
 Each eval must have a valid `__init__` file which exposes a module whom's class implement the protocol specified in 
 [/src/evaluation_file_protocol.py] and must contain a class name that matches the eval directory name 
@@ -154,7 +154,8 @@ answers to a series of questions.
 
 # Road Map
 - finish roadmap
-- capture token usuage 
+- extend support to codex, copilot and pi coding agent harnesses 
+- extend tui functionality (view results in tui)
 - polish console output
 
 
