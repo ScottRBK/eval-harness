@@ -5,8 +5,6 @@ from rich.live import Live
 from rich.table import Table
 from rich.spinner import Spinner 
 
-from src import evals
-from src.evals import encode_repo_forgetful
 from src.models import (
     AgentConfig,
     Eval,
