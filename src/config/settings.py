@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     CODEX_MOUNT: str = ""
 
     OUTPUT_DIR: str = "output"
+    RESULTS_FILENAME: str = "results.json"
+    CSV_RESULTS_FILENAME: str = "results.csv"
     LOG_LEVEL: str = "DEBUG"
     DOCKER_LOG_LEVEL: str = "WARNING"
     URLLIB3_LOG_LEVEL: str = "WARNING"

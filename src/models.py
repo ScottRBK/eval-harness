@@ -4,6 +4,11 @@ from agent_shell.models.agent import AgentType
 from uuid import UUID
 from datetime import datetime 
 
+
+class ResultFormat(StrEnum):
+    CSV ="csv"
+    JSON="json"
+
 class AgentEvalStatus(StrEnum):
     PENDING = "pending"
     PROCESSING = "processing"

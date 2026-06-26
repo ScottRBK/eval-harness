@@ -5,7 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "agent-shell-py>=0.1.12",
+    "agent-shell-py>=0.1.13",
     "docker>=7.1.0",
     "dotenv>=0.9.9",
     "pydantic>=2.13.3",

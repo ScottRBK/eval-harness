@@ -14,6 +14,9 @@ src/docker/certs/*.crt
 
 # Agents / Tools
 .serena
+.claude
+.codex
+.agents 
 
 # Logs
 output/

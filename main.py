@@ -13,19 +13,42 @@ from src.config.settings import settings
 from src.evals_engine import run_session
 from src.logging_config import configure_logging
 from src.tui import LiveStatus
+from src.repositories.evaluation_results import (
+    EvaluationResultsService,
+    JsonEvaluationResultsRepository,
+    CsvEvaluationResultsRepository,
+)
 from src.models import (
-    Eval,
-    EvalSession,
     AgentConfig,
     AgentEvalExecution,
     AgentEvalStatus,
+    Eval,
+    EvalSession,
     EvalExecution,
+    ResultFormat,
 )
 
 logger = logging.getLogger(__name__)
 
 _SESSION_LABEL = "com.eval-harness.session"
 
+def _get_results_service(result_format: ResultFormat, run_dir: Path) -> EvaluationResultsService:
+    match result_format:
+        case ResultFormat.JSON:
+            return EvaluationResultsService(results_repo=JsonEvaluationResultsRepository(run_dir=run_dir))
+        case ResultFormat.CSV:
+            return EvaluationResultsService(results_repo=CsvEvaluationResultsRepository(run_dir=run_dir))
+        case _:
+            raise ValueError("Result Format has not been implemented yet")
+
+def _get_results_filename(result_format: ResultFormat) -> str:
+    match result_format:
+        case ResultFormat.JSON:
+            return settings.RESULTS_FILENAME
+        case ResultFormat.CSV:
+            return settings.CSV_RESULTS_FILENAME
+        case _:
+            raise ValueError("Result Format has not been implemented yet")
 
 def _cleanup_eval_containers(signum, frame):
     """Kill all eval harness containers on SIGINT/SIGTERM."""
@@ -58,18 +81,7 @@ def _load_evals(eval_file: Path, session_id: UUID) -> EvalSession:
         ],
     )
 
-def main():
-    print("\n=== Welcome to Agent Eval Harness, an evaluation harness for CLI Agents == \n")
-
-    session_id = uuid4()
-    run_dir = configure_logging(session_id=session_id)
-    print(f"Evaluation Session ID: {session_id}")
-    print(f"Session Output Directory: {run_dir}")
-    logger.info(f"Session {session_id} starting")
-
-    signal.signal(signal.SIGINT, _cleanup_eval_containers)
-    signal.signal(signal.SIGTERM, _cleanup_eval_containers)
-
+def _configure_args_parse() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="Agent Evaluation Harness",
         description="Harness for running evaluations against agentic harnesses",
@@ -82,10 +94,39 @@ def main():
         type=Path
     )
 
+    parser.add_argument(
+        "-rf",
+        "--results_format",
+        help="output format for results file",
+        type=ResultFormat,
+        choices=list(ResultFormat),
+        default=ResultFormat.JSON,
+    )
+    
+    return parser 
+
+
+def main():
+    print("\n=== Welcome to Agent Eval Harness, an evaluation harness for CLI Agents == \n")
+
+    session_id = uuid4()
+    run_dir = configure_logging(session_id=session_id)
+    print(f"Evaluation Session ID: {session_id}")
+    print(f"Session Output Directory: {run_dir}")
+    logger.info(f"Session {session_id} starting")
+
+    signal.signal(signal.SIGINT, _cleanup_eval_containers)
+    signal.signal(signal.SIGTERM, _cleanup_eval_containers)
+
+    parser = _configure_args_parse() 
     args = parser.parse_args()
+
     eval_file = args.eval_file if args.eval_file else "evals.json"
 
+    results_service = _get_results_service(result_format=args.results_format, run_dir=run_dir) 
+
     print(f"\n::Loading Evaluations from {eval_file}::\n")
+    print(f"::Results will be exported to {args.results_format}")
 
     eval_session = _load_evals(eval_file=Path(eval_file), session_id=session_id)
 
@@ -100,7 +141,7 @@ def main():
             evals_executions=[
                 EvalExecution(id=uuid4(), eval=e, agent_config=agent) for e in evals
             ],
-            status="pending",
+            status=AgentEvalStatus.PENDING,
         ) for agent in agents 
     ]
 
@@ -123,11 +164,13 @@ def main():
     print(f"\n{summary}")
     for aee in failed:
         print(f"  FAILED: {aee.agent_config.agent_type}-{aee.agent_config.agent_model}")
+    
+    print(f"saving results file to {run_dir / _get_results_filename(args.results_format)}")
+    results_service.export(aees=agent_eval_executions)
+    print("results file saved")
 
     if failed:
         sys.exit(1)
-               
                    
 if __name__ == "__main__":
     main()
-

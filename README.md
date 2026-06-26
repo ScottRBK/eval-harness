@@ -148,11 +148,8 @@ answers to a series of questions.
 
 # Road Map
 - finish roadmap
-- catpure token usuage 
+- capture token usuage 
 - polish console output
-- eval output to log files 
-- eval results to json
-- eval results to csv 
 
 
 # Technical Notes
