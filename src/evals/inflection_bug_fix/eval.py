@@ -52,6 +52,7 @@ class InflectionBugFix:
             prompt="""Please can you run the tests in this repo and fix the bugs, please do not
             modify the tests in anyway, just find and fix the bugs in the repo""",
             model=os.environ["AGENT_MODEL"],
+            effort=os.environ["AGENT_EFFORT"],
         )
 
         print(response.response)

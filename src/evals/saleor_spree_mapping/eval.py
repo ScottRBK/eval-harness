@@ -78,6 +78,7 @@ class SaleorSpreeMapping:
             cwd="/workspace/",
             prompt=MAPPING_PROMPT,
             model=os.environ["AGENT_MODEL"],
+            effort=os.environ["AGENT_EFFORT"],
         )
 
         print(response.response)

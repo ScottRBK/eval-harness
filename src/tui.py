@@ -78,9 +78,14 @@ class LiveStatus:
             else:
                 status_cell = Text(status.value, style=STATUS_STYLES[status])
 
+            if agent_eval_exec.agent_config.effort:
+                model_name = f"{agent_eval_exec.agent_config.agent_model} ({agent_eval_exec.agent_config.effort})"
+            else:
+                model_name = agent_eval_exec.agent_config.agent_model
+
             table.add_row(
                 f"{agent_eval_exec.agent_config.agent_type}", 
-                f"{agent_eval_exec.agent_config.agent_model}", 
+                model_name, 
                 status_cell,
                 f"{evals_completed} / {len(agent_eval_exec.evals_executions)}",
                 f"{agent_eval_exec.total_time_taken_seconds}",

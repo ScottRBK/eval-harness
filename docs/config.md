@@ -1,0 +1,97 @@
+# Configuration
+
+This section details all the various configuration options for the Evaluation  Harness and is split into two sections:
+- Application Configuration
+- Evaluation Configuration 
+
+## Application Configuration
+The following settings are defaulted in [settings.py](../src/config/settings.py) however 
+can be overwritten with environment variables or .env file, all environment variables must be 
+prefixed with `EVAL_HARNESS_`
+
+|Variable|Type|Description|Example|
+|--------|----|-----------|-------|
+|`CLAUDE_CODE_OAUTH_TOKEN`|string|OAuth token to use with the claude code, obtained by typing `claude setup-token`||
+|`OPENCODE_CREDENTIALS_LOC`|string|Path to the OpenCode `auth.json`; it is copied and mounted into the container for OpenCode agents|`~/.local/share/opencode/auth.json`|
+|`COPILOT_MOUNT`|string|Credentials mount for the Copilot CLI agent (not yet implemented)||
+|`CODEX_MOUNT`|string|Credentials mount for the Codex agent (not yet implemented)||
+|`OUTPUT_DIR`|string|Parent directory for run output; each run creates a `<timestamp>_<session_id>` subfolder here|`output`|
+|`RESULTS_FILENAME`|string|Name of the JSON results file written inside each run's folder|`results.json`|
+|`CSV_RESULTS_FILENAME`|string|Name of the CSV results file written inside each run's folder|`results.csv`|
+|`LOG_LEVEL`|string|Level for the root logger (the harness's own logging)|`DEBUG`|
+|`DOCKER_LOG_LEVEL`|string|Level for the `docker` library logger, which is noisy at `INFO`|`WARNING`|
+|`URLLIB3_LOG_LEVEL`|string|Level for the `urllib3` logger, which is noisy at `INFO`|`WARNING`|
+|`MAX_AGENT_CONCURRENCY`|int|Maximum number of processing chains run in parallel. An ungrouped agent is its own chain; each processing group is a single chain|`4`|
+|`ARRANGE_TIMEOUT_SECONDS`|int|Timeout for the arrange phase of each eval, in seconds|`3600`|
+|`ACT_TIMEOUT_SECONDS`|int|Timeout for the act phase of each eval, in seconds|`3600`|
+|`SCORE_TIMEOUT_SECONDS`|int|Timeout for the score phase of each eval, in seconds|`600`|
+
+## Evaluation Configuration
+All evaluation configuration comes from an evaluation file. See an example in [eval.json](../evals.json).
+An evaluation file contains two lists - `evals` and `agents`
+
+### Evals Configuration 
+Each entry in `evals` selects one evaluation under `src/evals/` to run. Every agent in the file
+runs every eval. All fields are required and unknown keys are rejected.
+
+|Field|Type|Description|Example|
+|-----|----|-----------|-------|
+|`number`|int|Numeric identifier for the eval; shown in logs and written to the results|`2`|
+|`eval_dir`|string|Package name under `src/evals/` that implements the eval. The eval class is the PascalCase form of this name (`inflection_bug_fix` → `InflectionBugFix`)|`inflection_bug_fix`|
+|`description`|string|Human-readable summary, shown in logs and the TUI|`bug fixes in the inflection library`|
+|`run_count`|int|Recorded against the eval in the results (`eval_run_count`). Not currently used to repeat an eval — each eval runs once per agent|`1`|
+|`tags`|list[string]|Free-form labels recorded in the results (`eval_tags`). Not used for filtering or selection|`["python", "bugs"]`|
+
+```json
+"evals": [
+    {
+        "number": 2,
+        "eval_dir": "inflection_bug_fix",
+        "description": "bug fixes in the python string transformation lib named inflection",
+        "run_count": 1,
+        "tags": ["python", "bugs"]
+    }
+]
+```
+
+### Agents Configuration 
+
+Each entry in `agents` defines an agent and model to evaluate. Every agent runs every eval in
+the file.
+
+|Field|Type|Description|Example|
+|-----|----|-----------|-------|
+|`agent_type`|string|The CLI agent to run. One of `claude_code`, `opencode`, `gemini_cli`, `copilot_cli`, `codex`; only `claude_code` and `opencode` are implemented today|`opencode`|
+|`agent_model`|string|Model identifier for the agent. Agent-specific: `haiku`/`sonnet`/`opus` for `claude_code`, or a `provider/model` from the OpenCode config for `opencode`|`llama.cpp ai/qwen3.6-27b-8Q`|
+|`effort`|string|Optional — reasoning-effort level passed to the agent at runtime via the `AGENT_EFFORT` env var (`claude_code` applies it as its `--effort` flag; `opencode` currently accepts but ignores it). Also appended to the agent's log filename and recorded in the results (`agent_effort`), so agents sharing a type and model stay distinguishable|`high`|
+|`processing_group`|string|Optional — agents sharing a group run serially, never concurrently. Ungrouped agents and separate groups run in parallel up to `MAX_AGENT_CONCURRENCY`. Use it to pin agents that share a backend such as a single inference server|`bosman-server`|
+
+```json
+"agents": [
+    {
+        "agent_type": "claude_code",
+        "agent_model": "haiku",
+        "effort": "low"
+    },
+    {
+        "agent_type": "opencode",
+        "agent_model": "llama.cpp bosman/qwen3.6-35b",
+        "processing_group": "bosman-server"
+    }
+]
+```
+
+OpenCode providers and models are defined in `src/docker/configs/opencode/opencode.json`.
+
+### Specifying Evaluation File
+You can specify an evaluation file when you run the application using:
+
+```bash 
+uv run main.py -ef <path to evaluation file>
+```
+
+
+
+
+
+

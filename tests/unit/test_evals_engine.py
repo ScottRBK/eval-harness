@@ -44,11 +44,13 @@ def _make_aee(
     agent_type=AgentType.CLAUDE_CODE,
     agent_model="model",
     processing_group=None,
+    effort=None,
 ):
     """An AgentEvalExecution with one pending EvalExecution per eval dir."""
     agent = AgentConfig(
         agent_type=agent_type,
         agent_model=agent_model,
+        effort=effort,
         processing_group=processing_group,
     )
     evals = [
@@ -83,13 +85,15 @@ def fake_runner(monkeypatch):
     is either a ``(score, time_taken)``, ``(score, time_taken, total_tokens)``
     tuple or an ``Exception`` to raise. The
     returned recorder exposes ``constructed`` (the (agent_type, agent_model) each
-    runner was built with) and ``calls`` (the kwargs each ``docker_run`` saw).
+    runner was built with), ``efforts`` (the agent_effort each runner was built
+    with) and ``calls`` (the kwargs each ``docker_run`` saw).
     Index advancement is locked so the recorder is safe under concurrent agents.
     """
 
     def _install(results):
         recorder = SimpleNamespace(
             constructed=[],
+            efforts=[],
             session_ids=[],
             calls=[],
             results=list(results),
@@ -97,8 +101,9 @@ def fake_runner(monkeypatch):
         )
         lock = threading.Lock()
 
-        def _factory(agent_type, agent_model, logger=None, session_id=None):
+        def _factory(agent_type, agent_model, agent_effort=None, logger=None, session_id=None):
             recorder.constructed.append((agent_type, agent_model))
+            recorder.efforts.append(agent_effort)
             recorder.session_ids.append(session_id)
 
             def _docker_run(arrange_script, act_script, score_script, image):
@@ -345,6 +350,19 @@ class TestRunAgent:
 
         # Assert — every runner is built for this agent's type/model
         assert recorder.constructed == [(AgentType.OPENCODE, "m-x")] * 2
+
+    def test_forwards_agent_effort_to_the_runner(self, fake_runner, fake_eval_loading):
+        # Arrange — the configured reasoning effort must reach DockerRunner, which
+        # forwards it to the container as AGENT_EFFORT for the agent to consume
+        fake_eval_loading()
+        recorder = fake_runner([(1.0, 1.0)])
+        aee = _make_aee(["e1"], effort="high")
+
+        # Act
+        run_agent(aee, Queue())
+
+        # Assert — the runner was constructed with the agent's configured effort
+        assert recorder.efforts == ["high"]
 
     def test_passes_three_distinct_phase_scripts(self, fake_runner, fake_eval_loading):
         # Arrange — guards the host/container split: arrange/act/score stay separate

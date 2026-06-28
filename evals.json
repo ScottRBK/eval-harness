@@ -54,12 +54,20 @@
         },
         {
             "agent_type": "claude_code",
-            "agent_model": "sonnet"
+            "agent_model": "sonnet",
+            "effort": "high"
         },
         {
             "agent_type": "claude_code",
-            "agent_model": "opus"
+            "agent_model": "sonnet"
+            "effort": "medium"
+        },        
+        {
+            "agent_type": "claude_code",
+            "agent_model": "sonnet"
+            "effort": "low"
         },
+
         {
             "agent_type": "opencode",
             "agent_model": "opencode/big-pickle"

@@ -38,11 +38,13 @@ class DockerRunner:
         self,
         agent_type: AgentType,
         agent_model: str,
+        agent_effort: str | None = None,
         logger: logging.Logger | None = None,
         session_id: UUID | None = None,
     ):
         self._agent_type = agent_type
         self._agent_model = agent_model
+        self._agent_effort = agent_effort 
         # Per-agent logger when the engine injects one; module logger otherwise.
         self._log = logger or logging.getLogger(__name__)
         # Throwaway dirs we create for credentials; deleted after the run.
@@ -113,7 +115,10 @@ class DockerRunner:
         score = 0.0
         total_tokens = 0
         time_start = time.time()
-        container_name = safe_name(f"eval_harness_{self._agent_type.value}_{self._agent_model}")
+        effort_suffix = f"_{self._agent_effort}" if self._agent_effort else ""
+        container_name = safe_name(
+            f"eval_harness_{self._agent_type.value}_{self._agent_model}{effort_suffix}"
+        )
 
         try:
             client.containers.get(container_name).remove(force=True)
@@ -132,6 +137,7 @@ class DockerRunner:
                 environment={
                     "AGENT_TYPE": self._agent_type.value,
                     "AGENT_MODEL": self._agent_model,
+                    "AGENT_EFFORT": self._agent_effort or "",
                     **prov.environment,
                 },
                 detach=True,

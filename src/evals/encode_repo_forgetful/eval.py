@@ -71,6 +71,7 @@ class EncodeRepoForgetful:
             cwd=REPO_DIR,
             prompt=ENCODING_PROMPT,
             model=os.environ["AGENT_MODEL"],
+            effort=os.environ["AGENT_EFFORT"],
         )
         print(response.response)
         print(f"Cost: ${response.cost:.4f}")
@@ -107,7 +108,8 @@ class EncodeRepoForgetful:
             place, keep it valid JSON change nothing else
             """,
             model=os.environ["AGENT_MODEL"],
-            disallowed_tools=["bash", "web_search", "web_fetch"]
+            effort=os.environ["AGENT_EFFORT"],
+            disallowed_tools=["bash", "web_search", "web_fetch"],
         )
         print(response.response)
         print(f"Cost: ${response.cost:.4f}")

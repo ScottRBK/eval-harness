@@ -73,6 +73,7 @@ class ChessEngine:
             cwd=REPO_DIR,
             prompt=PROMPT,
             model=os.environ["AGENT_MODEL"],
+            effort=os.environ["AGENT_EFFORT"],
             disallowed_tools=["web_search", "web_fetch"],
         )
         print(response.response)

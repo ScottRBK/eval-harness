@@ -213,6 +213,77 @@ class TestDockerRun:
             ],
         ]
 
+    def test_passes_empty_agent_effort_env_when_unset(
+        self, claude_token, make_docker_client
+    ):
+        # Arrange — no effort configured. docker-py turns a None env *value* into a
+        # bare key the container inherits (and thus leaves unset), which would make
+        # the eval's os.environ["AGENT_EFFORT"] KeyError — so it must coerce to "".
+        client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            runner.docker_run("a", "b", "c", "img")
+
+        # Assert — the var is present and empty, never absent
+        env = client.containers.run.call_args.kwargs["environment"]
+        assert env["AGENT_EFFORT"] == ""
+
+    def test_passes_configured_agent_effort_into_container_env(
+        self, claude_token, make_docker_client
+    ):
+        # Arrange — a configured effort must reach the container verbatim so the
+        # agent_shell wrapper inside can forward it as the agent's --effort flag
+        client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model", agent_effort="high")
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            runner.docker_run("a", "b", "c", "img")
+
+        # Assert
+        env = client.containers.run.call_args.kwargs["environment"]
+        assert env["AGENT_EFFORT"] == "high"
+
+    def test_unset_effort_omits_effort_from_container_name(
+        self, claude_token, make_docker_client
+    ):
+        # Arrange — regression: a None effort once rendered the literal "_None"
+        # suffix (eval_harness_..._model_None) because the f-string stringifies None.
+        client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            runner.docker_run("a", "b", "c", "img")
+
+        # Assert — clean name, no trailing _None
+        name = client.containers.run.call_args.kwargs["name"]
+        assert name == "eval_harness_claude_code_model"
+        assert "None" not in name
+
+    def test_effort_disambiguates_container_name_for_same_type_and_model(
+        self, claude_token, make_docker_client
+    ):
+        # Arrange — two agents identical but for effort must not share a container
+        # name, or concurrent runs would force-remove each other's live container.
+        def _name_for(effort):
+            client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+            runner = DockerRunner(AgentType.CLAUDE_CODE, "model", agent_effort=effort)
+            with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+                runner.docker_run("a", "b", "c", "img")
+            return client.containers.run.call_args.kwargs["name"]
+
+        # Act
+        high = _name_for("high")
+        low = _name_for("low")
+
+        # Assert — distinct, and the effort is what distinguishes them
+        assert high == "eval_harness_claude_code_model_high"
+        assert low == "eval_harness_claude_code_model_low"
+        assert high != low
+
     def test_parses_score_from_last_eval_score_line(
         self, claude_token, make_docker_client
     ):

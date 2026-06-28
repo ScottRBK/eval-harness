@@ -54,6 +54,7 @@ docker build -t eval-harness-rust:latest -f src/docker/rust/Dockerfile src/docke
 ```bash 
 uv run main.py
 ```
+## [Configration](docs/config.md)
 
 # Harness Architecture
 

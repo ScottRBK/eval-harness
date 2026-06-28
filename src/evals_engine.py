@@ -77,6 +77,7 @@ def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None, session_id
             docker_runner = DockerRunner(
                 agent_type=aee.agent_config.agent_type,
                 agent_model=aee.agent_config.agent_model,
+                agent_effort=aee.agent_config.effort,
                 logger=log,
                 session_id=session_id,
             )
