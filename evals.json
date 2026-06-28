@@ -59,12 +59,12 @@
         },
         {
             "agent_type": "claude_code",
-            "agent_model": "sonnet"
+            "agent_model": "sonnet",
             "effort": "medium"
         },        
         {
             "agent_type": "claude_code",
-            "agent_model": "sonnet"
+            "agent_model": "sonnet",
             "effort": "low"
         },
 

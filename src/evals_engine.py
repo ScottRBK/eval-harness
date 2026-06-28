@@ -82,19 +82,33 @@ def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None, session_id
                 session_id=session_id,
             )
 
-            run_result = docker_runner.docker_run(
-                arrange_script=arrange_script,
-                act_script=act_script,
-                score_script=score_script,
-                image=image,
-            )
+            # Repeat the eval run_count times. Each run is a fresh container
+            # (arrange -> act -> score). Score is the mean across runs - a noisy
+            # measurement averaged into a stable estimate - while tokens and time
+            # are totals, the real cost every run actually spends.
+            run_count = max(eval_exec.eval.run_count, 1)
+            run_scores: list[float] = []
+            total_tokens = 0
+            total_time = 0.0
+            for run_number in range(1, run_count + 1):
+                if run_count > 1:
+                    log.info(f"Run {run_number}/{run_count}")
+                run_result = docker_runner.docker_run(
+                    arrange_script=arrange_script,
+                    act_script=act_script,
+                    score_script=score_script,
+                    image=image,
+                )
+                run_scores.append(run_result.score)
+                total_tokens += run_result.total_tokens
+                total_time += run_result.time_taken_seconds
 
-            eval_exec.score = run_result.score
-            aee.total_score += run_result.score
-            eval_exec.total_tokens = run_result.total_tokens
-            aee.total_tokens += run_result.total_tokens
-            eval_exec.time_taken_seconds = run_result.time_taken_seconds
-            aee.total_time_taken_seconds += run_result.time_taken_seconds
+            eval_exec.score = sum(run_scores) / len(run_scores)
+            aee.total_score += eval_exec.score
+            eval_exec.total_tokens = total_tokens
+            aee.total_tokens += total_tokens
+            eval_exec.time_taken_seconds = total_time
+            aee.total_time_taken_seconds += total_time
             eval_exec.date_executed = datetime.now()
             progress.put("update")
 

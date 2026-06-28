@@ -45,6 +45,7 @@ def _make_aee(
     agent_model="model",
     processing_group=None,
     effort=None,
+    run_count=1,
 ):
     """An AgentEvalExecution with one pending EvalExecution per eval dir."""
     agent = AgentConfig(
@@ -54,7 +55,7 @@ def _make_aee(
         processing_group=processing_group,
     )
     evals = [
-        Eval(number=i, eval_dir=d, description=f"desc {d}", run_count=1, tags=[])
+        Eval(number=i, eval_dir=d, description=f"desc {d}", run_count=run_count, tags=[])
         for i, d in enumerate(eval_dirs)
     ]
     return AgentEvalExecution(
@@ -402,6 +403,92 @@ class TestRunAgent:
 
         # Assert
         assert recorder.calls[0].image == "eval-harness:latest"
+
+
+# --------------------------------------------------------------------------- #
+# A2. run_agent — repeats each eval run_count times and aggregates
+# --------------------------------------------------------------------------- #
+
+
+class TestRunAgentRunCount:
+    def test_runs_docker_run_once_per_run_count(self, fake_runner, fake_eval_loading):
+        # Arrange — one eval, run_count=3 → three independent containers
+        fake_eval_loading()
+        recorder = fake_runner([(0.6, 1.0), (0.9, 1.0), (0.3, 1.0)])
+        aee = _make_aee(["e1"], run_count=3)
+
+        # Act
+        run_agent(aee, Queue())
+
+        # Assert
+        assert len(recorder.calls) == 3
+
+    def test_averages_score_across_runs(self, fake_runner, fake_eval_loading):
+        # Arrange — 0.3/0.9/0.6 average to 0.6; first run (0.3) differs from the
+        # mean so this fails if we ever keep only one run's score
+        fake_eval_loading()
+        fake_runner([(0.3, 1.0), (0.9, 1.0), (0.6, 1.0)])
+        aee = _make_aee(["e1"], run_count=3)
+
+        # Act
+        run_agent(aee, Queue())
+
+        # Assert
+        assert aee.evals_executions[0].score == pytest.approx(0.6)
+        assert aee.total_score == pytest.approx(0.6)
+
+    def test_sums_tokens_across_runs(self, fake_runner, fake_eval_loading):
+        # Arrange — 10/15/5 total 30 (a TOTAL, never an average)
+        fake_eval_loading()
+        fake_runner([(1.0, 1.0, 10), (1.0, 1.0, 15), (1.0, 1.0, 5)])
+        aee = _make_aee(["e1"], run_count=3)
+
+        # Act
+        run_agent(aee, Queue())
+
+        # Assert
+        assert aee.evals_executions[0].total_tokens == 30
+        assert aee.total_tokens == 30
+
+    def test_sums_time_across_runs(self, fake_runner, fake_eval_loading):
+        # Arrange — 2.0/3.0/1.5 total 6.5 (real wall time accrued)
+        fake_eval_loading()
+        fake_runner([(1.0, 2.0), (1.0, 3.0), (1.0, 1.5)])
+        aee = _make_aee(["e1"], run_count=3)
+
+        # Act
+        run_agent(aee, Queue())
+
+        # Assert
+        assert aee.evals_executions[0].time_taken_seconds == pytest.approx(6.5)
+        assert aee.total_time_taken_seconds == pytest.approx(6.5)
+
+    def test_total_score_sums_per_eval_means(self, fake_runner, fake_eval_loading):
+        # Arrange — two evals, run_count=2:
+        # e1 runs 0.4/0.8 → mean 0.6 ; e2 runs 1.0/0.0 → mean 0.5
+        fake_eval_loading()
+        fake_runner([(0.4, 1.0), (0.8, 1.0), (1.0, 1.0), (0.0, 1.0)])
+        aee = _make_aee(["e1", "e2"], run_count=2)
+
+        # Act
+        run_agent(aee, Queue())
+
+        # Assert — agent total is the sum of per-eval means
+        assert [e.score for e in aee.evals_executions] == pytest.approx([0.6, 0.5])
+        assert aee.total_score == pytest.approx(1.1)
+
+    def test_emits_one_update_per_eval_not_per_run(self, fake_runner, fake_eval_loading):
+        # Arrange — one eval at run_count=3 still emits entry + 1 + completion
+        fake_eval_loading()
+        fake_runner([(1.0, 1.0), (1.0, 1.0), (1.0, 1.0)])
+        aee = _make_aee(["e1"], run_count=3)
+        progress: Queue = Queue()
+
+        # Act
+        run_agent(aee, progress)
+
+        # Assert — progress is per-eval, not per-run (3, not 5)
+        assert _drain(progress) == ["update"] * 3
 
 
 # --------------------------------------------------------------------------- #

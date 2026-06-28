@@ -88,9 +88,9 @@ class LiveStatus:
                 model_name, 
                 status_cell,
                 f"{evals_completed} / {len(agent_eval_exec.evals_executions)}",
-                f"{agent_eval_exec.total_time_taken_seconds}",
-                f"{agent_eval_exec.total_tokens}",
-                f"{agent_eval_exec.total_score}",
+                f"{agent_eval_exec.total_time_taken_seconds:,.2f}",
+                f"{agent_eval_exec.total_tokens:,}",
+                f"{agent_eval_exec.total_score:.2f}",
             )
 
         return table
