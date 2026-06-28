@@ -75,7 +75,8 @@ def _load_evals(eval_file: Path, session_id: UUID) -> EvalSession:
             AgentConfig(
                 agent_type=AgentType(a["agent_type"]),
                 agent_model=a["agent_model"],
-                effort=a.get("effort") or None
+                effort=a.get("effort") or None,
+                processing_group=a.get("processing_group") or None,
             )
             for a in raw["agents"]
         ],

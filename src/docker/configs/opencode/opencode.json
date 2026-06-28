@@ -30,6 +30,13 @@
                         "context": 200000,
                         "output": 128000
                     }
+                },
+                "qwen3.6-35b" : {
+                    "name": "qwen3.6-35b",
+                    "limit": {
+                        "context": 200000,
+                        "output": 128000
+                    }
                 }
        }
     },

@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     DOCKER_LOG_LEVEL: str = "WARNING"
     URLLIB3_LOG_LEVEL: str = "WARNING"
 
+    ### Evaluation Run Configuration ###
     MAX_AGENT_CONCURRENCY: int = 4 
+    ARRANGE_TIMEOUT_SECONDS: int = 60 * 60 
+    ACT_TIMEOUT_SECONDS: int = 60 * 60 
+    SCORE_TIMEOUT_SECONDS: int = 10 * 60 
+
 
 settings = Settings()

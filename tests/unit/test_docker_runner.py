@@ -167,6 +167,52 @@ class TestProvisionAgent:
 
 
 class TestDockerRun:
+    def test_passes_phase_timeout_to_docker_exec_command(
+        self, claude_token, make_docker_client, monkeypatch
+    ):
+        # Arrange — distinct values prove each phase gets its configured timeout.
+        monkeypatch.setattr("src.docker_runner.settings.ARRANGE_TIMEOUT_SECONDS", 111)
+        monkeypatch.setattr("src.docker_runner.settings.ACT_TIMEOUT_SECONDS", 222)
+        monkeypatch.setattr("src.docker_runner.settings.SCORE_TIMEOUT_SECONDS", 333)
+        client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            runner.docker_run("arrange-script", "act-script", "score-script", "img")
+
+        # Assert
+        commands = [call.args[1] for call in client.api.exec_create.call_args_list]
+        assert commands == [
+            [
+                "timeout",
+                "--kill-after=30s",
+                "111",
+                "python",
+                "-u",
+                "-c",
+                "arrange-script",
+            ],
+            [
+                "timeout",
+                "--kill-after=30s",
+                "222",
+                "python",
+                "-u",
+                "-c",
+                "act-script",
+            ],
+            [
+                "timeout",
+                "--kill-after=30s",
+                "333",
+                "python",
+                "-u",
+                "-c",
+                "score-script",
+            ],
+        ]
+
     def test_parses_score_from_last_eval_score_line(
         self, claude_token, make_docker_client
     ):

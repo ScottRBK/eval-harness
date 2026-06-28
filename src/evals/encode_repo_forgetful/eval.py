@@ -52,7 +52,11 @@ class EncodeRepoForgetful:
         time.sleep(60)
 
         print("forgetful initalised")
-        print(subprocess.run(["opencode", "mcp", "list"], capture_output=True, text=True).stdout)
+        try:
+            mcp_servers = await shell.list_mcp_servers()
+        except Exception as e: 
+            mcp_servers = []
+        print(mcp_servers)
 
         print("cloning github repo")
         subprocess.run(

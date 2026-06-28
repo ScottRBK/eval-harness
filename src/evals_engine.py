@@ -1,4 +1,8 @@
-import textwrap, inspect, importlib
+import ast
+import inspect
+import importlib
+import keyword
+import textwrap
 import logging
 from queue import Queue, Empty
 from collections.abc import Callable
@@ -108,6 +112,23 @@ def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None, session_id
     aee.status = AgentEvalStatus.COMPLETED
     progress.put("update")
 
+def _build_processing_chains(aees: list[AgentEvalExecution]) -> list[list[AgentEvalExecution]]:
+
+    chains = []
+    groups = {} 
+
+    for aee in aees:
+        group = aee.agent_config.processing_group
+        if group is None: 
+            chains.append([aee])
+        elif group in groups:
+            chains[groups[group]].append(aee)
+        else: 
+            groups[group] = len(chains)
+            chains.append([aee])
+
+    return chains
+
 
 def run_session(
     agent_eval_executions: list[AgentEvalExecution],
@@ -116,16 +137,25 @@ def run_session(
     run_dir=None,
     session_id: UUID | None = None,
 ) -> list[AgentEvalExecution]:
-    """Run every agent concurrently, one worker thread per agent.
+    """Run every agent/processing group in parallel, one worker thread per agent.
     """
     progress: Queue = Queue()
+    chains = _build_processing_chains(aees=agent_eval_executions)
+
+    def _run_chain(chain):
+        for aee in chain:
+            try:
+                run_agent(aee, progress, run_dir, session_id)
+            except Exception as e:
+                logger.error(
+                    f"Agent {aee.agent_config.agent_type}-{aee.agent_config.agent_model} "
+                    f"failed: {e!r}"
+                )
+                   #this is fine because in run agent we are making it as FAILED so can swallow it
+                continue
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {
-            pool.submit(run_agent, aee, progress, run_dir, session_id): aee
-            for aee in agent_eval_executions
-        }
-
+        futures = [pool.submit(_run_chain, chain) for chain in chains] 
         while not all(f.done() for f in futures) or not progress.empty():
             try:
                 progress.get(timeout=0.1)
@@ -133,32 +163,68 @@ def run_session(
                 continue
             on_update()
 
-    failed = []
-    for future, aee in futures.items():
-        exc = future.exception()
-        if exc is not None:
-            logger.error(
-                f"Agent {aee.agent_config.agent_type}-{aee.agent_config.agent_model} "
-                f"failed: {exc!r}"
-            )
-            failed.append(aee)
-    return failed
-
+    return [aee for aee in agent_eval_executions if aee.status == AgentEvalStatus.FAILED]
 
 def _load_eval_class(eval_dir: str):
     module = importlib.import_module(f"src.evals.{eval_dir}")
     class_name = "".join(p.capitalize() for p in eval_dir.split("_"))
     return getattr(module, class_name)
 
+_FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
 
-def _method_to_script(method, embedded_values: dict[str, str] | None = None) -> str:
+def _extract_method_body(method) -> str:
     src = textwrap.dedent(inspect.getsource(method))
-    # need to drop the method signature just so we have the raw body
-    body = textwrap.dedent("\n".join(src.split("\n")[1:]))
+    tree = ast.parse(src)
+    fn = next((node for node in tree.body if isinstance(node, _FUNCTION_NODES)), None)
+    if fn is None:
+        raise ValueError(f"Expected function source for {method!r}")
 
+    if not fn.body:
+        return "pass\n"
+
+    if fn.body[0].lineno == fn.lineno:
+        parts = []
+        for stmt in fn.body:
+            segment = ast.get_source_segment(src, stmt)
+            if segment is None:
+                raise ValueError(f"Could not extract statement source from {method!r}")
+            parts.append(segment)
+        body = "\n".join(parts)
+    else:
+        lines = src.splitlines()
+        start = fn.body[0].lineno - 1
+        body_col = fn.body[0].col_offset
+
+        # Preserve initial comments/blank lines inside the function body; AST
+        # only reports executable statements.
+        while start > fn.lineno:
+            previous = lines[start - 1]
+            stripped = previous.strip()
+            if stripped and not stripped.startswith("#"):
+                break
+            if stripped and len(previous) - len(previous.lstrip()) < body_col:
+                break
+            start -= 1
+
+        body = "\n".join(lines[start:fn.body[-1].end_lineno])
+
+    return textwrap.dedent(body).rstrip() + "\n"
+
+
+def _render_embedded_values(embedded_values: dict[str, object] | None = None) -> str:
     constants = ""
+
     for name, value in (embedded_values or {}).items():
+        if not name.isidentifier() or keyword.iskeyword(name):
+            raise ValueError(f"Invalid embedded value name: {name!r}")
         constants += f"{name} = {value!r}\n"
+
+    return constants
+
+
+def _method_to_script(method, embedded_values: dict[str, object] | None = None) -> str:
+    body = _extract_method_body(method)
+    constants = _render_embedded_values(embedded_values)
 
     indented = textwrap.indent(constants + _AGENT_SHELL_TOKEN_TRACKER + body, "    ")
     return f"import asyncio\nasync def _main():\n{indented}\nasyncio.run(_main())"

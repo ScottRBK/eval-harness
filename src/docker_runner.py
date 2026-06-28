@@ -139,12 +139,20 @@ class DockerRunner:
                 labels=labels,
             )
 
+            phase_timeouts = {
+                "arrange": settings.ARRANGE_TIMEOUT_SECONDS,
+                "act": settings.ACT_TIMEOUT_SECONDS,
+                "score": settings.SCORE_TIMEOUT_SECONDS,
+            }
+
             for label, script in [
                 ("arrange", arrange_script),
                 ("act", act_script),
                 ("score", score_script),
             ]:
-                cmd = ["python", "-u","-c", script] # future_me: -u to ensure stdout/stderr unbffered
+                timeout_seconds = phase_timeouts[label]
+                # future_me: -u to ensure stdout/stderr unbffered
+                cmd = ["timeout", "--kill-after=30s", str(timeout_seconds), "python", "-u","-c", script] 
                 exec_id = client.api.exec_create(container.id, cmd)["Id"]
                 self._log.info(f"--- {label} phase ---")
                 self._log.info("container started")
@@ -155,7 +163,6 @@ class DockerRunner:
                 try:
                     for chunk in stream:
                         text = chunk.decode(errors="replace")
-                        #TODO: Need to implement console output inside the live display ... well maybe
                         self._log.info(f"docker output: {text}")
                         buffer += text
                         pending += text 
@@ -170,6 +177,11 @@ class DockerRunner:
                     stream._response.close()
 
                 exit_code = client.api.exec_inspect(exec_id)["ExitCode"]
+
+                if exit_code in (124, 137) :
+                    self._log.error(f"{label} timed out after {timeout_seconds}s")
+                    raise TimeoutError(f"{label} timed out after {timeout_seconds}s")
+
 
                 if exit_code != 0:
                     self._log.error(

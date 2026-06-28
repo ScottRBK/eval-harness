@@ -11,7 +11,9 @@ status transitions, score/time accumulation, and — critically — the number a
 ordering of ``progress`` events the threaded drain loop consumes.
 """
 
+import logging
 import threading
+import time
 from datetime import datetime
 from queue import Queue
 from types import SimpleNamespace
@@ -37,9 +39,18 @@ from src.models import (
 # --------------------------------------------------------------------------- #
 
 
-def _make_aee(eval_dirs, agent_type=AgentType.CLAUDE_CODE, agent_model="model"):
+def _make_aee(
+    eval_dirs,
+    agent_type=AgentType.CLAUDE_CODE,
+    agent_model="model",
+    processing_group=None,
+):
     """An AgentEvalExecution with one pending EvalExecution per eval dir."""
-    agent = AgentConfig(agent_type=agent_type, agent_model=agent_model)
+    agent = AgentConfig(
+        agent_type=agent_type,
+        agent_model=agent_model,
+        processing_group=processing_group,
+    )
     evals = [
         Eval(number=i, eval_dir=d, description=f"desc {d}", run_count=1, tags=[])
         for i, d in enumerate(eval_dirs)
@@ -150,6 +161,68 @@ def fake_eval_loading(monkeypatch):
             mod.image = image
         monkeypatch.setattr("src.evals_engine._load_eval_class", lambda eval_dir: mod)
         return mod
+
+    return _install
+
+
+# --------------------------------------------------------------------------- #
+# Processing-group scheduler probe
+# --------------------------------------------------------------------------- #
+
+
+@pytest.fixture
+def recording_run_agent(monkeypatch):
+    """Replace ``run_agent`` with a recorder so ``run_session``'s *scheduling* can
+    be asserted without Docker.
+
+    The real ``run_agent`` drives a container, so we substitute it at the module
+    boundary ``run_session`` resolves it from and observe which agents run, in what
+    order, and — the point of the feature — which run concurrently.
+
+    ``install(...)`` configures the stand-in and returns a recorder exposing:
+      - ``entries``     (processing_group, agent_model) in the order agents start
+      - ``completed``   agent_models that finished without raising
+      - ``max_active``  processing_group -> peak number running at once
+
+    Knobs:
+      - ``hold``        seconds each agent stays "running" — an overlap window, so
+                        a bug that runs one group in parallel is actually observable
+      - ``barrier``     a ``threading.Barrier`` each agent waits on, to prove N
+                        agents are genuinely in flight together (else it times out)
+      - ``fail_models`` agent_models whose run marks the aee FAILED then raises,
+                        mirroring the real ``run_agent`` failure contract
+    """
+    recorder = SimpleNamespace(entries=[], completed=[], active={}, max_active={})
+    lock = threading.Lock()
+
+    def _install(hold=0.0, barrier=None, fail_models=()):
+        def _fake_run_agent(aee, progress, run_dir=None, session_id=None):
+            group = aee.agent_config.processing_group
+            model = aee.agent_config.agent_model
+            with lock:
+                recorder.entries.append((group, model))
+                recorder.active[group] = recorder.active.get(group, 0) + 1
+                recorder.max_active[group] = max(
+                    recorder.max_active.get(group, 0), recorder.active[group]
+                )
+            try:
+                if barrier is not None:
+                    barrier.wait(timeout=5)
+                if hold:
+                    time.sleep(hold)
+                if model in fail_models:
+                    aee.status = AgentEvalStatus.FAILED
+                    progress.put("update")
+                    raise RuntimeError(f"{model} boom")
+                aee.status = AgentEvalStatus.COMPLETED
+                recorder.completed.append(model)
+                progress.put("update")
+            finally:
+                with lock:
+                    recorder.active[group] -= 1
+
+        monkeypatch.setattr("src.evals_engine.run_agent", _fake_run_agent)
+        return recorder
 
     return _install
 
@@ -511,6 +584,31 @@ def _sample_method(self):
     return value + 1
 
 
+def _identity_decorator(func):
+    return func
+
+
+@_identity_decorator
+def _decorated_sample_method(self):
+    value = "decorated"
+    return value
+
+
+def _multi_line_signature_method(
+    self,
+    answer=42,
+):
+    return answer
+
+
+def _one_line_sample_method(self): return 42
+
+
+def _leading_comment_sample_method(self):
+    # This comment should stay inside the generated script body.
+    return 42
+
+
 class TestMethodToScript:
     def test_wraps_body_in_async_main_runner(self):
         # Act
@@ -535,6 +633,11 @@ class TestMethodToScript:
         # Assert
         assert "ANSWER = 'secret'" in script
 
+    def test_rejects_invalid_embedded_value_names(self):
+        # Act / Assert
+        with pytest.raises(ValueError, match="Invalid embedded value name"):
+            _method_to_script(_sample_method, embedded_values={"not-valid": "secret"})
+
     def test_injects_agent_shell_token_tracker(self):
         # Act
         script = _method_to_script(_sample_method)
@@ -543,6 +646,39 @@ class TestMethodToScript:
         assert "AgentShell as _EvalHarnessAgentShell" in script
         assert "EVAL_TOTAL_TOKENS=" in script
         assert "response.output_tokens" in script
+
+    def test_extracts_decorated_method_body(self):
+        # Act
+        script = _method_to_script(_decorated_sample_method)
+
+        # Assert
+        assert 'value = "decorated"' in script
+        assert "@_identity_decorator" not in script
+        assert "def _decorated_sample_method" not in script
+
+    def test_extracts_multi_line_signature_method_body(self):
+        # Act
+        script = _method_to_script(_multi_line_signature_method)
+
+        # Assert
+        assert "return answer" in script
+        assert "def _multi_line_signature_method" not in script
+
+    def test_extracts_one_line_method_body(self):
+        # Act
+        script = _method_to_script(_one_line_sample_method)
+
+        # Assert
+        assert "return 42" in script
+        assert "def _one_line_sample_method" not in script
+
+    def test_preserves_leading_body_comments(self):
+        # Act
+        script = _method_to_script(_leading_comment_sample_method)
+
+        # Assert
+        assert "# This comment should stay inside the generated script body." in script
+        assert "return 42" in script
 
 
 # --------------------------------------------------------------------------- #
@@ -568,3 +704,117 @@ class TestLoadEvalClass:
         # Assert
         assert captured["name"] == "src.evals.saleor_spree_mapping"
         assert result == "THE_CLASS"
+
+
+# --------------------------------------------------------------------------- #
+# G. run_session — processing groups (serialise within a group, parallel across)
+# --------------------------------------------------------------------------- #
+
+
+class TestProcessingGroups:
+    def test_agents_in_the_same_group_never_run_concurrently(
+        self, recording_run_agent
+    ):
+        # Arrange — two agents pinned to one shared backend ("bosman-server").
+        # max_workers is generous so only the grouping, not the pool size, can
+        # keep them apart.
+        recorder = recording_run_agent(hold=0.05)
+        agents = [
+            _make_aee(["e1"], agent_model="b1", processing_group="bosman-server"),
+            _make_aee(["e2"], agent_model="b2", processing_group="bosman-server"),
+        ]
+
+        # Act
+        run_session(agents, on_update=lambda: None, max_workers=4)
+
+        # Assert — never more than one of the group running at any instant
+        assert recorder.max_active["bosman-server"] == 1
+
+    def test_agents_in_different_groups_run_concurrently(self, recording_run_agent):
+        # Arrange — distinct groups must NOT serialise against each other. The
+        # barrier only releases if both agents are in flight together.
+        barrier = threading.Barrier(2)
+        recorder = recording_run_agent(barrier=barrier)
+        agents = [
+            _make_aee(["e1"], agent_model="a", processing_group="ai-server"),
+            _make_aee(["e2"], agent_model="b", processing_group="bosman-server"),
+        ]
+
+        # Act
+        run_session(agents, on_update=lambda: None, max_workers=4)
+
+        # Assert — both reached the barrier, so both ran at the same time
+        assert set(recorder.completed) == {"a", "b"}
+
+    def test_ungrouped_agents_run_concurrently(self, recording_run_agent):
+        # Arrange — the default path: agents with no group must each run freely,
+        # never collapsed together into one serial chain.
+        barrier = threading.Barrier(3)
+        recorder = recording_run_agent(barrier=barrier)
+        agents = [
+            _make_aee(["e1"], agent_model="haiku"),
+            _make_aee(["e2"], agent_model="sonnet"),
+            _make_aee(["e3"], agent_model="opus"),
+        ]
+
+        # Act
+        run_session(agents, on_update=lambda: None, max_workers=4)
+
+        # Assert
+        assert set(recorder.completed) == {"haiku", "sonnet", "opus"}
+
+    def test_a_group_runs_its_agents_in_submission_order(self, recording_run_agent):
+        # Arrange — within a group, order is deterministic: first listed runs first
+        recorder = recording_run_agent(hold=0.01)
+        agents = [
+            _make_aee(["e1"], agent_model="first", processing_group="g"),
+            _make_aee(["e2"], agent_model="second", processing_group="g"),
+            _make_aee(["e3"], agent_model="third", processing_group="g"),
+        ]
+
+        # Act
+        run_session(agents, on_update=lambda: None, max_workers=4)
+
+        # Assert
+        assert [model for _, model in recorder.entries] == ["first", "second", "third"]
+
+    def test_failure_in_a_group_is_isolated_and_still_reported(
+        self, recording_run_agent
+    ):
+        # Arrange — the first agent in a group fails; the rest of the group must
+        # still run, and the failure must still surface in the returned list.
+        recorder = recording_run_agent(fail_models={"b1"})
+        agents = [
+            _make_aee(["e1"], agent_model="b1", processing_group="bosman-server"),
+            _make_aee(["e2"], agent_model="b2", processing_group="bosman-server"),
+        ]
+
+        # Act
+        failed = run_session(agents, on_update=lambda: None, max_workers=4)
+
+        # Assert — survivor ran despite the earlier failure; failure aggregated
+        assert "b2" in recorder.completed
+        assert [a.agent_config.agent_model for a in failed] == ["b1"]
+
+    def test_failure_emits_a_session_level_log_line(self, recording_run_agent, caplog):
+        # Arrange — the one-line summary the old future.exception() collector used
+        # to emit must still reach the module logger (session.log) now that the
+        # chain swallows the exception to stay cascade-free.
+        recording_run_agent(fail_models={"b1"})
+        agents = [
+            _make_aee(["e1"], agent_model="b1", processing_group="bosman-server"),
+            _make_aee(["e2"], agent_model="b2", processing_group="bosman-server"),
+        ]
+
+        # Act
+        with caplog.at_level(logging.ERROR, logger="src.evals_engine"):
+            run_session(agents, on_update=lambda: None, max_workers=4)
+
+        # Assert — the failed agent is named in an ERROR record; the survivor is not
+        failure_logs = [
+            record.getMessage()
+            for record in caplog.records
+            if record.levelno == logging.ERROR and "failed" in record.getMessage().lower()
+        ]
+        assert any("b1" in message for message in failure_logs)
+        assert not any("b2" in message for message in failure_logs)

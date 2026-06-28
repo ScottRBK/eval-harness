@@ -39,6 +39,7 @@ class AgentConfig:
     agent_type: AgentType
     agent_model: str
     effort: str | None = None
+    processing_group: str | None = None 
 
 @dataclass
 class EvalExecution: 
