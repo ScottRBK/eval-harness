@@ -6,6 +6,8 @@ ENTRYPOINT []
 
 ARG CLAUDE_CODE_VERSION=latest
 ARG OPENCODE_VERSION=latest
+ARG CODEX_VERSION=latest 
+ARG COPILOT_VERSION=latest 
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
@@ -53,4 +55,6 @@ ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
 ENV PATH=$PATH:/usr/local/share/npm-global/bin
 
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} && \
-    npm install -g opencode-ai@${OPENCODE_VERSION}
+    npm install -g opencode-ai@${OPENCODE_VERSION} && \
+    npm install -g @github/copilot@${COPILOT_VERSION} && \
+    npm install -g @openai/codex@${CODEX_VERSION} 

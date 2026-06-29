@@ -26,7 +26,8 @@ and ships it as `python -c "<body>"`. The eval source is never mounted, so the a
 scoring logic.
 
 `src/docker_runner.py:DockerRunner` handles container lifecycle and per-agent credential mounting. 
-New agents are added by implementing `_setup_<agent>_volumes` and adding a case to `_set_up_agent_volumes`.
+New agents are added by implementing `_setup_<agent>` (returning an `AgentProvisioning` with either
+`environment` vars or staged `volumes`) and adding a case to `_provision_agent`.
 
 The harness passes `AGENT_TYPE` and `AGENT_MODEL` to the container via env vars; `act()` reads them 
 and builds an `AgentShell` from `agent_shell` (the unified CLI-agent wrapper installed in the image).

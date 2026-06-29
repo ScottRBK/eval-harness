@@ -45,6 +45,24 @@ def opencode_creds(tmp_path, monkeypatch):
     return creds
 
 
+@pytest.fixture
+def codex_creds(tmp_path, monkeypatch):
+    creds = tmp_path / "auth.json"
+    creds.write_text("{}")
+    monkeypatch.setattr(
+        "src.docker_runner.settings.CODEX_CREDENTIALS_LOC", str(creds)
+    )
+    return creds
+
+
+@pytest.fixture
+def copilot_token(monkeypatch):
+    monkeypatch.setattr(
+        "src.docker_runner.settings.COPILOT_GITHUB_TOKEN", "tok-copilot"
+    )
+    return "tok-copilot"
+
+
 # --------------------------------------------------------------------------- #
 # A. _staged_mount — real filesystem behaviour via tmp_path
 # --------------------------------------------------------------------------- #
@@ -153,12 +171,68 @@ class TestProvisionAgent:
         runner = DockerRunner(AgentType.OPENCODE, "model")
 
         # Act
-        volumes = runner._setup_opencode_volumes()
+        prov = runner._provision_agent()
 
         # Assert — both the host-secret mount and the repo-config mount present
-        binds = {spec["bind"] for spec in volumes.values()}
+        binds = {spec["bind"] for spec in prov.volumes.values()}
         assert "/home/node/.local/share/opencode" in binds
         assert "/home/node/.config/opencode" in binds
+
+    def test_opencode_without_auth_file_raises(self, tmp_path, monkeypatch):
+        # Arrange — point at a path that does not exist
+        monkeypatch.setattr(
+            "src.docker_runner.settings.OPENCODE_CREDENTIALS_LOC",
+            str(tmp_path / "missing.json"),
+        )
+        runner = DockerRunner(AgentType.OPENCODE, "model")
+
+        # Act / Assert
+        with pytest.raises(RuntimeError):
+            runner._provision_agent()
+
+    def test_codex_provisions_auth_volume_not_environment(self, codex_creds):
+        # Arrange
+        runner = DockerRunner(AgentType.CODEX, "model")
+
+        # Act
+        prov = runner._provision_agent()
+
+        # Assert — Codex authenticates via a mounted auth.json, not an env var
+        assert prov.environment == {}
+        binds = {spec["bind"] for spec in prov.volumes.values()}
+        assert "/home/node/.codex" in binds
+
+    def test_codex_without_auth_file_raises(self, tmp_path, monkeypatch):
+        # Arrange — point at a path that does not exist
+        monkeypatch.setattr(
+            "src.docker_runner.settings.CODEX_CREDENTIALS_LOC",
+            str(tmp_path / "missing.json"),
+        )
+        runner = DockerRunner(AgentType.CODEX, "model")
+
+        # Act / Assert
+        with pytest.raises(RuntimeError):
+            runner._provision_agent()
+
+    def test_copilot_provisions_token_as_environment(self, copilot_token):
+        # Arrange
+        runner = DockerRunner(AgentType.COPILOT_CLI, "model")
+
+        # Act
+        prov = runner._provision_agent()
+
+        # Assert
+        assert prov.environment == {"COPILOT_GITHUB_TOKEN": copilot_token}
+        assert prov.volumes == {}
+
+    def test_copilot_without_token_raises(self, monkeypatch):
+        # Arrange
+        monkeypatch.setattr("src.docker_runner.settings.COPILOT_GITHUB_TOKEN", "")
+        runner = DockerRunner(AgentType.COPILOT_CLI, "model")
+
+        # Act / Assert
+        with pytest.raises(RuntimeError):
+            runner._provision_agent()
 
 
 # --------------------------------------------------------------------------- #

@@ -69,6 +69,23 @@ class DockerRunner:
 
         return {str(staging): {"bind": container_dir, "mode": "rw"}}
 
+    def _setup_codex(self) -> AgentProvisioning:
+        # Codex authenticates from ~/.codex/auth.json (the ChatGPT login). We stage-mount a
+        # throwaway copy so Codex can refresh the token in place during the run without
+        # touching the host file; the copy is discarded afterwards. The host keeps its own
+        # copy fresh through normal codex use, so each run starts from a current token.
+        auth = Path(settings.CODEX_CREDENTIALS_LOC).expanduser()
+        if not auth.exists():
+            raise RuntimeError(
+                f"Codex auth file not found at {auth} (run `codex login` on the host)"
+            )
+        return AgentProvisioning(volumes=self._staged_mount([auth], "/home/node/.codex"))
+
+    def _setup_copilot(self) -> AgentProvisioning:
+        if not settings.COPILOT_GITHUB_TOKEN:
+            raise RuntimeError("COPILOT_GITHUB_TOKEN not configured (set EVAL_HARNESS_COPILOT_GITHUB_TOKEN")
+        return AgentProvisioning(environment={"COPILOT_GITHUB_TOKEN": settings.COPILOT_GITHUB_TOKEN})
+
 
     def _setup_claude_code(self) -> AgentProvisioning:
         if not settings.CLAUDE_CODE_OAUTH_TOKEN:
@@ -76,19 +93,17 @@ class DockerRunner:
         return AgentProvisioning(environment={"CLAUDE_CODE_OAUTH_TOKEN": settings.CLAUDE_CODE_OAUTH_TOKEN})
 
     def _setup_opencode(self) -> AgentProvisioning:
-        return AgentProvisioning(volumes=self._setup_opencode_volumes())
-
-    def _setup_opencode_volumes(self) -> dict[str, dict[str, str]]:
-        credentials = self._staged_mount(
-            [Path(settings.OPENCODE_CREDENTIALS_LOC).expanduser()],
-            "/home/node/.local/share/opencode",
-        )
+        creds_file = Path(settings.OPENCODE_CREDENTIALS_LOC).expanduser()
+        if not creds_file.exists():
+            raise RuntimeError(
+                f"OpenCode auth file not found at {creds_file} (run `opencode auth login`)"
+            )
+        credentials = self._staged_mount([creds_file], "/home/node/.local/share/opencode")
         config = self._staged_mount(
             [CONFIG_ROOT / "opencode" / "opencode.json"],
             "/home/node/.config/opencode",
         )
-
-        return credentials | config
+        return AgentProvisioning(volumes=credentials | config)
 
 
     def _provision_agent(self) -> AgentProvisioning:
@@ -97,6 +112,10 @@ class DockerRunner:
                 return self._setup_claude_code() 
             case AgentType.OPENCODE:
                 return self._setup_opencode() 
+            case AgentType.CODEX:
+                return self._setup_codex() 
+            case AgentType.COPILOT_CLI:
+                return self._setup_copilot()
             case _:
                 raise NotImplementedError(f"Agent not implemented for {self._agent_type}")
 

@@ -39,7 +39,7 @@ runs every eval. All fields are required and unknown keys are rejected.
 |`number`|int|Numeric identifier for the eval; shown in logs and written to the results|`2`|
 |`eval_dir`|string|Package name under `src/evals/` that implements the eval. The eval class is the PascalCase form of this name (`inflection_bug_fix` → `InflectionBugFix`)|`inflection_bug_fix`|
 |`description`|string|Human-readable summary, shown in logs and the TUI|`bug fixes in the inflection library`|
-|`run_count`|int|Recorded against the eval in the results (`eval_run_count`). Not currently used to repeat an eval — each eval runs once per agent|`1`|
+|`run_count`|int|Recorded against the eval in the results (`eval_run_count`). Used to determine the number of times that the evaluation is run against the agent|`1`|
 |`tags`|list[string]|Free-form labels recorded in the results (`eval_tags`). Not used for filtering or selection|`["python", "bugs"]`|
 
 ```json

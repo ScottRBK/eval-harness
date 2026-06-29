@@ -9,8 +9,8 @@ class Settings(BaseSettings):
     
     CLAUDE_CODE_OAUTH_TOKEN: str = ""
     OPENCODE_CREDENTIALS_LOC: str = "~/.local/share/opencode/auth.json"
-    COPILOT_MOUNT: str = ""
-    CODEX_MOUNT: str = ""
+    CODEX_CREDENTIALS_LOC: str = "~/.codex/auth.json"
+    COPILOT_GITHUB_TOKEN: str = ""
 
     OUTPUT_DIR: str = "output"
     RESULTS_FILENAME: str = "results.json"
