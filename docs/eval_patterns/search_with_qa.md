@@ -9,7 +9,7 @@ For this example we are using [typer](https://github.com/fastapi/typer), a popul
 helping build CLI applications. 
 > [!NOTE]
 > In reality, a lot of these answers might come from the model weights itself as it is a very popular public Python library, however the point is to just demonstrate the pattern.
-> If you wanted to a similar evaluation, then you will want to use a private repository.
+> When building a similar evaluation, then you will want to use a private repository.
 
 For the knowledge base I am using the [forgetful](https://github.com/ScottRBK/forgetful) which is my
 own MCP memory system for AI Agents. 
@@ -100,7 +100,7 @@ to disable tools that the agent harness is using for the evaluation. This is pos
 a list of tools we want to disable to the `disallowed_tools` parameter. 
 
 > [!WARNING]
-> There are some limitations around this feature depending on the CLI harness you are working with, so be sure to read more about it [here](https://github.com/ScottRBK/agent-shell#restricting-tools-disallowed_tools).
+> There are some limitations around the `disallowed_tools` feature depending on the CLI harness you are working with, so be sure to read more about it [here](https://github.com/ScottRBK/agent-shell#restricting-tools-disallowed_tools).
 
 ### score 
 
