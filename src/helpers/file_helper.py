@@ -78,7 +78,7 @@ def read_questions(eval_file: str, include_answers: bool) -> str:
 
     data.pop("note", None)
     for question in data["questions"]:
-        question.pop("answer", None)
+        question["answer"] = ""
         question.pop("source", None)
 
     return json.dumps(data, indent=2)

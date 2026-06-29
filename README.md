@@ -153,6 +153,21 @@ score phase. Such as fixing a bug or implementing a feature.
 In this phase you will validate the outcome of the act phase, such as executing automated tests or scoring
 answers to a series of questions. 
 
+### Output and Logging
+Each session gets it's own directory created under the location of the `EVAL_HARNESS_OUTPUT_DIR`, which
+defaults to `output` in the root of the solution. 
+
+Each agent gets their own .log file, which amongst other things, captures all print captured in the eval 
+scripts. 
+
+As well as this a .log file for each agent there is also a results file that is created based on your
+[configuration](docs/config.md). 
+
+The results file is written as either `results.json` (the default) or `results.csv`. See
+[Results File Schema](docs/results.md) for the full field-by-field breakdown.
+
+
+
 # Road Map
 - finish roadmap
 - extend support to pi coding agent harness

@@ -83,16 +83,12 @@ class EncodeRepoForgetful:
 
     async def act(self) -> None:
         import os
-        import json 
         from agent_shell.shell import AgentShell
         from agent_shell.models.agent import AgentType
 
-        scaffold = json.loads(QUESTIONS)
-        for q in scaffold["questions"]:
-            q["answer"] = ""
         os.makedirs("/workspace", exist_ok=True)
         with open("/workspace/answers.json", "w") as f:
-            json.dump(scaffold, f, indent=2)
+            f.write(QUESTIONS)
 
         shell = AgentShell(agent_type=AgentType(os.environ["AGENT_TYPE"]))
 
@@ -123,11 +119,11 @@ class EncodeRepoForgetful:
             print(f"EVAL_SCORE=0.0") 
             return 
         
-        answers = {}
+        agent_answers = {}
         try:
             with open("/workspace/answers.json", "r") as f:
-                answers = json.loads(f.read())
-            answers_dict = {a["id"]: a["answer"] for a in answers["questions"]}
+                agent_answers = json.loads(f.read())
+            agent_answers_dict = {a["id"]: a["answer"] for a in agent_answers["questions"]}
         except(OSError, ValueError, KeyError, TypeError):
             print("EVAL_SCORE=0.0")
             return
@@ -137,7 +133,7 @@ class EncodeRepoForgetful:
             scaffold = json.loads(ANSWERS)
 
             for q in scaffold["questions"]:
-                answer = str(answers_dict.get(q["id"], "")).strip().upper()
+                answer = str(agent_answers_dict.get(q["id"], "")).strip().upper()
                 if answer == q["answer"].strip().upper():
                     correct += 1 
 
