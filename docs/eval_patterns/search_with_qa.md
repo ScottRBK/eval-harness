@@ -15,8 +15,8 @@ For the knowledge base I am using the [forgetful](https://github.com/ScottRBK/fo
 own MCP memory system for AI Agents. 
 
 The evaluation as well also demonstrates how you can use [agent-shell](https://github.com/ScottRBK/agent-shell)
-to add and list MCP servers to AI CLI clients, which I think is a capability for measuring various harness
-capabilities. 
+to add and list MCP servers to AI CLI clients. The ability to test agent harnesses with and without
+certain tools is really powerful.
 
 Another thing to comment on at this stage is that perhaps you would be better off measuring these two
 activities in isolation, so an eval for encoding data in there and evaluation for just answering the 
