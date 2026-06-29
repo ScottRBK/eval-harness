@@ -807,7 +807,7 @@ class TestLoadEvalClass:
         result = _load_eval_class("saleor_spree_mapping")
 
         # Assert
-        assert captured["name"] == "src.evals.saleor_spree_mapping"
+        assert captured["name"] == "example_evals.saleor_spree_mapping"
         assert result == "THE_CLASS"
 
 

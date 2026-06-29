@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     URLLIB3_LOG_LEVEL: str = "WARNING"
 
     ### Evaluation Run Configuration ###
+    EVALS_PACKAGE: str = "example_evals"
     MAX_AGENT_CONCURRENCY: int = 4 
     ARRANGE_TIMEOUT_SECONDS: int = 60 * 60 
     ACT_TIMEOUT_SECONDS: int = 60 * 60 

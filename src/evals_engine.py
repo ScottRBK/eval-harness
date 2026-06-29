@@ -13,6 +13,7 @@ from uuid import UUID
 from src.models import AgentEvalExecution, AgentEvalStatus
 from src.docker_runner import DockerRunner
 from src.logging_config import agent_logger
+from src.config.settings import settings 
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +182,7 @@ def run_session(
     return [aee for aee in agent_eval_executions if aee.status == AgentEvalStatus.FAILED]
 
 def _load_eval_class(eval_dir: str):
-    module = importlib.import_module(f"src.evals.{eval_dir}")
+    module = importlib.import_module(f"{settings.EVALS_PACKAGE}.{eval_dir}")
     class_name = "".join(p.capitalize() for p in eval_dir.split("_"))
     return getattr(module, class_name)
 

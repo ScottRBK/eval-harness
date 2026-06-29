@@ -19,7 +19,7 @@ or scripts. It was originally inspired for auto-research type loops but I've com
 application for it.
 
 ## Example Eval Patterns
-This harness ships with some [example evals](docs/evals.md), as I come up with different types of 
+This harness ships with some example evals, as I come up with different types of 
 evaluations for my own workflows, then this example collection will increase.
 
 These evals are to some degree quite straight forward for modern harnesses and models, given that they 
@@ -29,11 +29,10 @@ list of the patterns and a brief description:
 
 |Evaluation Pattern|Description|Example Evaluation|
 |------------------|-----------|------------------|
-|Search with Questions and Answers|Have an agent perform a search of a knowedge base and then answer multiple choice questions about it in a JSON file, this eval also demonstrates how you can add an mcp server to the agentic harness as part of the evaluation|encode_repo_forgetful|
-|Bug Fix with Automated Tests|Ask the agent to fix bugs in a repo that is causing automated tests to fail, this eval also demonstrates how to restore the original tests to ensure agent hasn't modified them to pass|inflection_bug_fix|
-|Conical Data Mapping|Instructs the agent to create a Canical Data Mapping between two data models and output the values to a CSV file for scoring, an alternative to the JSON question and answers|saleor_spree_mapping|
-|New Feature with Automated Tests|Ask an agent to implement a new feature with prediefined API contract and run hidden automated tests after the agent has completed their work, it also demonstrates how you can make use of extrending the base docker image, in this example we add rustup to allow for the agent to use cargo to build and test in Rust|chess_engine|
-
+|[Search with Questions and Answers](docs/eval_patterns/search_with_qa.md)|Have an agent perform a search of a knowedge base and then answer multiple choice questions about it in a JSON file, this eval also demonstrates how you can add an mcp server to the agentic harness as part of the evaluation|encode_repo_forgetful|
+|[Bug Fix with Automated Tests](docs/eval_patterns/bug_fix.md)|Ask the agent to fix bugs in a repo that is causing automated tests to fail, this eval also demonstrates how to restore the original tests to ensure agent hasn't modified them to pass|inflection_bug_fix|
+|[Conical Data Mapping](docs/eval_patterns/conical_data_mapping.md)|Instructs the agent to create a Canical Data Mapping between two data models and output the values to a CSV file for scoring, an alternative to the JSON question and answers|saleor_spree_mapping|
+|[New Feature with Automated Tests](docs/eval_patterns/new_feature.md)|Ask an agent to implement a new feature with prediefined API contract and run hidden automated tests after the agent has completed their work, it also demonstrates how you can make use of extrending the base docker image, in this example we add rustup to allow for the agent to use cargo to build and test in Rust|chess_engine|
 
 # Getting Started
 
@@ -64,9 +63,9 @@ uv run main.py
 The harness is structured in a way that there is an evaluation protocol, any evaluation must implement
 the same methods within the protocol.
 
-The harness ingests an evaluation file (the default is [evals.json](evals.json)), which determines
+When the harness is run it ingests an evaluation configuration file (the default is [evals.json](evals.json)), which determines
 which evaluations are in scope of the evaluation run, and also which agent harness/model combinations
-should be in scope of the run as well.
+should be in scope of the run.
 
 When I build my own automated tests for testing my actual code, I have used the popular _Arrange_, 
 _Act_ and _Assert_ pattern, to this end I have adopted these as methods that any evaluation class must
@@ -159,7 +158,7 @@ answers to a series of questions.
 - extend support to pi coding agent harness
 - extend tui functionality (view results in tui)
 - polish console output
-- add direct api key authorisation for harnesses
+- add direct api key authorisation for harnes
 
 
 # Technical Notes
