@@ -16,16 +16,41 @@ from src.models import (
     AgentEvalStatus,
 )
 
+PALETTE = {
+    "border": "#9aa3b2",
+    "header": "#7f8796",
+    "label": "#7f8796",
+    "value": "#d7dce5",
+    "accent": "#9bbcff",
+    "accent_alt": "#82aaff",
+    "good": "#4ff3a5",
+    "bad": "#ff6b6b",
+    "muted": "#8b93a1",
+}
+
 STATUS_STYLES = {
-    AgentEvalStatus.PENDING: "dim #8b93a1",
-    AgentEvalStatus.PROCESSING: "#9bbcff",
-    AgentEvalStatus.COMPLETED: "bold #4ff3a5",
-    AgentEvalStatus.FAILED: "bold #ff6b6b",
+    AgentEvalStatus.PENDING: f"dim {PALETTE['muted']}",
+    AgentEvalStatus.PROCESSING: PALETTE["accent"],
+    AgentEvalStatus.COMPLETED: f"bold {PALETTE['good']}",
+    AgentEvalStatus.FAILED: f"bold {PALETTE['bad']}",
 }
 
 
-def print_introduction(intro_text: str):
-    print(Panel(intro_text, title="Welcome to Agent Eval Harness, an evaluation harness for CLI Agents"))
+def print_introduction(fields: dict[str, str]):
+    grid = Table.grid(padding=(0, 2))
+    grid.add_column(justify="right", style=PALETTE["label"], no_wrap=True)
+    grid.add_column(style=f"bold {PALETTE['value']}")
+    for label, value in fields.items():
+        grid.add_row(label, value)
+
+    print(Panel(
+        grid,
+        title=Text("AGENT EVAL HARNESS", style=f"bold {PALETTE['accent']}"),
+        subtitle=Text("an evaluation harness for CLI agents", style=f"dim {PALETTE['label']}"),
+        box=box.ROUNDED,
+        border_style=PALETTE["border"],
+        padding=(1, 3),
+    ))
 
 class LiveStatus:
     def __init__(
@@ -54,8 +79,8 @@ class LiveStatus:
             show_lines=True,
             pad_edge=False,
             padding=(0, 2),
-            header_style="bold #7f8796",
-            border_style="#9aa3b2",
+            header_style=f"bold {PALETTE['header']}",
+            border_style=PALETTE["border"],
         )
 
         table.add_column("Harness", style="bold white", no_wrap=True)
@@ -73,7 +98,7 @@ class LiveStatus:
                 status_cell = Spinner(
                     "arc",
                     text=Text(status.value, style=STATUS_STYLES[status]),
-                    style="#82aaff",
+                    style=PALETTE["accent_alt"],
                 )
             else:
                 status_cell = Text(status.value, style=STATUS_STYLES[status])

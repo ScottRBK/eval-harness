@@ -123,11 +123,12 @@ def main():
 
     results_service = _get_results_service(result_format=args.results_format, run_dir=run_dir) 
     
-    intro_text = f"Evaluation Session ID: {session_id}\n"
-    intro_text += f"Session Output Directory: {run_dir}\n"
-    intro_text += f"Loading Evaluations from {eval_file}\n" 
-    intro_text += f"Results will be exported to {args.results_format}"""
-    print_introduction(intro_text=intro_text)
+    print_introduction({
+        "Session ID": str(session_id),
+        "Output Directory": str(run_dir),
+        "Evals": str(eval_file),
+        "Results": str(args.results_format),
+    })
     eval_session = _load_evals(eval_file=Path(eval_file), session_id=session_id)
 
     evals = eval_session.evals
