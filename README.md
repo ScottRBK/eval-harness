@@ -8,8 +8,9 @@ The following agent harnesses are currently supported:
 
 - [x] Claude Code
 - [x] Opencode
-- [ ] Copilot
-- [ ] Codex
+- [x] Copilot
+- [x] Codex
+- [ ] Pi
 
 A lot of this is possible thanks to the agentic harness abstraction repository 
 [agent-shell](https://github.com/ScottRBK/agent-shell), check it out if you have use cases where you 
@@ -155,9 +156,10 @@ answers to a series of questions.
 
 # Road Map
 - finish roadmap
-- extend support to codex, copilot and pi coding agent harnesses 
+- extend support to pi coding agent harness
 - extend tui functionality (view results in tui)
 - polish console output
+- add direct api key authorisation for harnesses
 
 
 # Technical Notes
