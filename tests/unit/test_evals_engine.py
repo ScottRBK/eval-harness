@@ -794,8 +794,13 @@ class TestMethodToScript:
 class TestLoadEvalClass:
     def test_derives_pascal_case_class_name_from_dir(self, monkeypatch):
         # Arrange — capture the import target, return a module exposing the class
+        class SaleorSpreeMapping:
+            async def arrange(self): ...
+            async def act(self): ...
+            async def score(self): ...
+
         captured = {}
-        module = SimpleNamespace(SaleorSpreeMapping="THE_CLASS")
+        module = SimpleNamespace(SaleorSpreeMapping=SaleorSpreeMapping)
 
         def _fake_import(name):
             captured["name"] = name
@@ -808,7 +813,33 @@ class TestLoadEvalClass:
 
         # Assert
         assert captured["name"] == "example_evals.saleor_spree_mapping"
-        assert result == "THE_CLASS"
+        assert result is SaleorSpreeMapping
+
+    def test_rejects_class_missing_a_phase(self, monkeypatch):
+        # Arrange — satisfies arrange/act but not score
+        class SaleorSpreeMapping:
+            async def arrange(self): ...
+            async def act(self): ...
+
+        module = SimpleNamespace(SaleorSpreeMapping=SaleorSpreeMapping)
+        monkeypatch.setattr(
+            "src.evals_engine.importlib.import_module", lambda name: module
+        )
+
+        # Act / Assert
+        with pytest.raises(TypeError, match="must be a class implementing"):
+            _load_eval_class("saleor_spree_mapping")
+
+    def test_rejects_non_class_attribute(self, monkeypatch):
+        # Arrange — the resolved attribute is not a class at all
+        module = SimpleNamespace(SaleorSpreeMapping="THE_CLASS")
+        monkeypatch.setattr(
+            "src.evals_engine.importlib.import_module", lambda name: module
+        )
+
+        # Act / Assert
+        with pytest.raises(TypeError, match="must be a class implementing"):
+            _load_eval_class("saleor_spree_mapping")
 
 
 # --------------------------------------------------------------------------- #

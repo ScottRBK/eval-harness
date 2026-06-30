@@ -27,8 +27,9 @@ Important considerations for each evaluation file:
 
 
 """
-from typing import Protocol
+from typing import Protocol, runtime_checkable 
 
+@runtime_checkable 
 class EvaluationFile(Protocol):
     async def arrange(self) -> None: ...
     async def act(self) -> None: ...

@@ -14,6 +14,8 @@ from src.models import AgentEvalExecution, AgentEvalStatus
 from src.docker_runner import DockerRunner
 from src.logging_config import agent_logger
 from src.config.settings import settings 
+from src.evaluation_file_protocol import EvaluationFile
+
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +186,10 @@ def run_session(
 def _load_eval_class(eval_dir: str):
     module = importlib.import_module(f"{settings.EVALS_PACKAGE}.{eval_dir}")
     class_name = "".join(p.capitalize() for p in eval_dir.split("_"))
-    return getattr(module, class_name)
+    cls = getattr(module, class_name)
+    if not (isinstance(cls, type) and issubclass(cls, EvaluationFile)):
+        raise TypeError(f"{class_name} must be a class implementing arrange/act/score")
+    return cls
 
 _FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
 

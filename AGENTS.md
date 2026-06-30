@@ -20,10 +20,12 @@ uv run main.py
 
 ## Architecture
 
-Eval classes (`src/evals/*/*.py`) implement `arrange()` / `act()` / `score()`, all three phases are 
-run inside a docker container** — `main.py:method_to_script` extracts it via `inspect.getsource()` 
-and ships it as `python -c "<body>"`. The eval source is never mounted, so the agent can't read 
-scoring logic.
+Eval classes (in the package set by `EVALS_PACKAGE`, default `example_evals/*/*.py`) implement
+`arrange()` / `act()` / `score()`; all three phases run inside a docker container —
+`src/evals_engine.py:_method_to_script` extracts each method via `inspect.getsource()` and ships it
+as `python -c "<body>"`. The eval source is never mounted, so the agent can't read scoring logic.
+The eval contract is the `EvaluationFile` Protocol in `src/evaluation_file_protocol.py`; it is
+enforced at load by `_load_eval_class`.
 
 `src/docker_runner.py:DockerRunner` handles container lifecycle and per-agent credential mounting. 
 New agents are added by implementing `_setup_<agent>` (returning an `AgentProvisioning` with either
