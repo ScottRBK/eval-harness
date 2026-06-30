@@ -30,5 +30,26 @@ Code's `setup-token` mints a long-lived OAuth token; for Copilot you supply a Gi
 
 A missing credential fails fast at provisioning with a clear error before any container starts.
 
+## Private repositories (harness-level GitHub token)
+
+The table above is about **agent** auth. Cloning a **private** GitHub repo inside an eval is a
+separate concern — it is the same regardless of which agent is under test — so it is configured
+once at the harness level, not per agent.
+
+Set `EVAL_HARNESS_GITHUB_TOKEN` in `.env` to a token that can read the target repos (a fine-grained
+PAT with **Contents: Read**, or a classic PAT with the `repo` scope). When set, the harness injects
+it into every container as `GH_TOKEN`; when unset, nothing is injected and public-repo evals keep
+cloning anonymously (this is **fail-open**, unlike agent creds which fail fast).
+
+`GH_TOKEN` alone authenticates any `gh` command. For a plain `git clone` to use it, the eval's
+`arrange()` runs `gh auth setup-git` first (guarded on `GH_TOKEN` being present), which registers
+`gh` as git's credential helper — so the token is never written into a remote URL or the logs:
+
+```python
+if os.environ.get("GH_TOKEN"):
+    subprocess.run(["gh", "auth", "setup-git"], check=True)
+subprocess.run(["git", "clone", REPO_URL, REPO_DIR], check=True)
+```
+
 [^1]: A **user-owned** fine-grained PAT carrying the **Copilot Requests** permission (classic `ghp_`
-tokens are rejected). `gh auth token` may work if its token carries that permission.
+tokens are rejected). 

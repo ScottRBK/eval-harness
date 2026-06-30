@@ -59,6 +59,13 @@ class EncodeRepoForgetful:
         print(mcp_servers)
 
         print("cloning github repo")
+        # Private repos: GH_TOKEN (injected by the harness when configured) lets gh
+        # register itself as git's credential helper, so the HTTPS clone below
+        # authenticates. No-op for public repos / when unset — the clone still runs
+        # anonymously, and gh is never invoked with an empty token.
+        if os.environ.get("GH_TOKEN"):
+            subprocess.run(["gh", "auth", "setup-git"], check=True)
+
         subprocess.run(
                 ["git", "-c", "advice.detachedHead=false", "clone", "--quiet",
                  "--depth", "1", "--branch", REPO_REF, REPO_URL, REPO_DIR],

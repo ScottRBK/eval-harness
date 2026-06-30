@@ -15,6 +15,7 @@ prefixed with `EVAL_HARNESS_`
 |`OPENCODE_CREDENTIALS_LOC`|string|Path to the OpenCode `auth.json`; it is copied and mounted into the container for OpenCode agents|`~/.local/share/opencode/auth.json`|
 |`COPILOT_MOUNT`|string|Credentials mount for the Copilot CLI agent (not yet implemented)||
 |`CODEX_MOUNT`|string|Credentials mount for the Codex agent (not yet implemented)||
+|`GITHUB_TOKEN`|string|Harness-level GitHub token for cloning private repos inside the container. Injected as `GH_TOKEN`; unset means public-repo clones only. See [authorisation](authorisation.md#private-repositories-harness-level-github-token)||
 |`OUTPUT_DIR`|string|Parent directory for run output; each run creates a `<timestamp>_<session_id>` subfolder here|`output`|
 |`RESULTS_FILENAME`|string|Name of the JSON results file written inside each run's folder|`results.json`|
 |`CSV_RESULTS_FILENAME`|string|Name of the CSV results file written inside each run's folder|`results.csv`|

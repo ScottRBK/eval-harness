@@ -63,6 +63,12 @@ def copilot_token(monkeypatch):
     return "tok-copilot"
 
 
+@pytest.fixture
+def github_token(monkeypatch):
+    monkeypatch.setattr("src.docker_runner.settings.GITHUB_TOKEN", "tok-gh")
+    return "tok-gh"
+
+
 # --------------------------------------------------------------------------- #
 # A. _staged_mount — real filesystem behaviour via tmp_path
 # --------------------------------------------------------------------------- #
@@ -519,3 +525,38 @@ class TestDockerRun:
 
         # Assert — NotFound swallowed, run proceeds normally
         assert result.score == 0.5
+
+    def test_injects_github_token_as_gh_token_env_when_set(
+        self, claude_token, github_token, make_docker_client
+    ):
+        # Arrange — a configured GitHub token is harness infrastructure, not an
+        # agent credential: it must reach every container as GH_TOKEN so arrange()'s
+        # git/gh clone can read private repos, whichever agent is under test.
+        client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            runner.docker_run("a", "b", "c", "img")
+
+        # Assert
+        env = client.containers.run.call_args.kwargs["environment"]
+        assert env["GH_TOKEN"] == github_token
+
+    def test_omits_gh_token_env_when_github_token_unset(
+        self, claude_token, make_docker_client, monkeypatch
+    ):
+        # Arrange — fail-open: with no token configured, GH_TOKEN must be absent.
+        # gh refuses to run with an empty token, and public-repo evals must keep
+        # cloning anonymously, so we never inject a blank GH_TOKEN.
+        monkeypatch.setattr("src.docker_runner.settings.GITHUB_TOKEN", "")
+        client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            runner.docker_run("a", "b", "c", "img")
+
+        # Assert
+        env = client.containers.run.call_args.kwargs["environment"]
+        assert "GH_TOKEN" not in env

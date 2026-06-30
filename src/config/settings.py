@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     OPENCODE_CREDENTIALS_LOC: str = "~/.local/share/opencode/auth.json"
     CODEX_CREDENTIALS_LOC: str = "~/.codex/auth.json"
     COPILOT_GITHUB_TOKEN: str = ""
+    GITHUB_TOKEN: str = ""
 
     OUTPUT_DIR: str = "output"
     RESULTS_FILENAME: str = "results.json"

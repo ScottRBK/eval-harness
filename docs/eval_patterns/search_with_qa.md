@@ -11,6 +11,13 @@ helping build CLI applications.
 > In reality, a lot of these answers might come from the model weights itself as it is a very popular public Python library, however the point is to just demonstrate the pattern.
 > When building a similar evaluation, then you will want to use a private repository.
 
+> [!TIP]
+> To point this eval at a **private** repository, set `EVAL_HARNESS_GITHUB_TOKEN` in `.env` to a
+> token that can read it. The harness injects it into the container as `GH_TOKEN`, and the clone in
+> `arrange()` runs `gh auth setup-git` (guarded on the token being present) so the HTTPS `git clone`
+> authenticates. See [authorisation](../authorisation.md#private-repositories-harness-level-github-token)
+> for details. Leaving the token unset keeps public-repo clones working anonymously.
+
 For the knowledge base I am using the [forgetful](https://github.com/ScottRBK/forgetful) which is my
 own MCP memory system for AI Agents. 
 
@@ -49,6 +56,11 @@ We then print a list of mcp servers as confirmation before cloning a repo to the
 in the embedded values: 
 
 ```python
+# When a private repo is targeted, GH_TOKEN is present in the container env and we
+# register gh as git's credential helper so the HTTPS clone authenticates. Guarded
+# so public-repo runs (no token) clone anonymously and gh is never given a blank token.
+if os.environ.get("GH_TOKEN"):
+    subprocess.run(["gh", "auth", "setup-git"], check=True)
 subprocess.run(
     ["git", "-c", "advice.detachedHead=false", "clone", "--quiet",
      "--depth", "1", "--branch", REPO_REF, REPO_URL, REPO_DIR],
