@@ -2,7 +2,7 @@
 
 ## What this is
 
-A Python framework that runs CLI coding agents (Claude Code, OpenCode, Gemini CLI, Copilot CLI, Codex) 
+A Python framework that runs CLI coding agents (Claude Code, OpenCode, Copilot CLI, Codex) 
 inside Docker containers and grades their work.
 
 ## Commands
@@ -34,15 +34,19 @@ New agents are added by implementing `_setup_<agent>` (returning an `AgentProvis
 The harness passes `AGENT_TYPE` and `AGENT_MODEL` to the container via env vars; `act()` reads them 
 and builds an `AgentShell` from `agent_shell` (the unified CLI-agent wrapper installed in the image).
 
+## Evaluations
+Each of the example evaluations map to an evaluation patterns that are located in `docs/eval_patterns`,
+documentation also exists for patterns in the `skills/eval_creation/patterns`, be sure if you ever add 
+or update a pattern to include documentation in both places.
 
-# Logs
+## Logs
 Each evaluation run has its own output folder (specified in `settings.py` with the variable `OUTPUT_DIR`)
 There is a `session.log` as well as a per agent log file.
 
 ## Status
 
-Working: Claude Code, OpenCode. 
-Codex / Copilot CLI / Gemini CLI not yet implemented.
+Working: Claude Code, OpenCode, Copilot, Codex
+Pi not yet implemented.
 
 ## Repo Specific Instructions
 As a general rule, do not implement code automatically - the maintainer of this repository is a dinosaur

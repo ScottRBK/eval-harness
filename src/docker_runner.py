@@ -189,9 +189,8 @@ class DockerRunner:
                 try:
                     for chunk in stream:
                         text = chunk.decode(errors="replace")
-                        self._log.info(f"docker output: {text}")
                         buffer += text
-                        pending += text 
+                        pending += text
                         while "\n" in pending:
                             line, pending = pending.split("\n", 1)
                             self._log.info(f"[{label}] {line}")

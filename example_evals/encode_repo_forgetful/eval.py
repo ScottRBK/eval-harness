@@ -48,15 +48,25 @@ class EncodeRepoForgetful:
         )
         await shell.add_mcp_server(forgetful_mcp)
 
-        # pause here for a bit to allow the fastembed model to download
-        time.sleep(60)
+        timeout = 5 * 60
+        start_timer = time.time() 
+        timer = 0 
+        mcp_servers = []  
+        while timer < timeout:
+            try:
+                mcp_servers = await shell.list_mcp_servers()
+            except Exception: 
+                pass 
+            if mcp_servers:
+                break 
+            time.sleep(2)
+            timer = time.time() - start_timer 
 
-        print("forgetful initalised")
-        try:
-            mcp_servers = await shell.list_mcp_servers()
-        except Exception as e: 
-            mcp_servers = []
+        if not mcp_servers:
+            raise RuntimeError(f"forgetful MCP server failed to initialise withing {timeout}s - aborting eval")
+
         print(mcp_servers)
+        print("forgetful initialised")
 
         print("cloning github repo")
         # Private repos: GH_TOKEN (injected by the harness when configured) lets gh

@@ -380,6 +380,35 @@ class TestDockerRun:
         assert result.score == 0.85
         assert result.time_taken_seconds >= 0
 
+    def test_streams_each_output_line_once_without_raw_chunk_dump(
+        self, claude_token, make_docker_client, caplog
+    ):
+        # Regression: docker_run logged every chunk twice — a raw
+        # "docker output: {chunk}" dump AND the same bytes re-split into
+        # "[phase] {line}" records — so every line appeared twice in the
+        # per-agent log (worst on Copilot, whose stream is token-granular).
+        import logging
+
+        # Arrange — a distinctive multi-line phase output
+        client = make_docker_client(
+            [("alpha\nbravo", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)]
+        )
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
+
+        # Act
+        with caplog.at_level(logging.INFO, logger="src.docker_runner"):
+            with mock.patch(
+                "src.docker_runner.docker.from_env", return_value=client
+            ):
+                runner.docker_run("a", "b", "c", "img")
+
+        # Assert — the raw chunk dump is gone and each line is logged exactly once
+        assert "docker output:" not in caplog.text
+        assert "[arrange] alpha" in caplog.text
+        assert "[arrange] bravo" in caplog.text
+        assert caplog.text.count("alpha") == 1
+        assert caplog.text.count("bravo") == 1
+
     def test_score_defaults_to_zero_without_eval_score_line(
         self, claude_token, make_docker_client
     ):

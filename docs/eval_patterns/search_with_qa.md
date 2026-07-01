@@ -1,15 +1,14 @@
 # Search with Questions and Answers 
 
-## Overview 
 This eval measures two things:
 1. The ability of an agent to encode information about a github repo in to a knowledge base.
 1. The ability to retrieve information from about the github repo using only the knowledge base.
 
+## Overview 
 For this example we are using [typer](https://github.com/fastapi/typer), a popular Python library for 
-helping build CLI applications. 
-> [!NOTE]
-> In reality, a lot of these answers might come from the model weights itself as it is a very popular public Python library, however the point is to just demonstrate the pattern.
-> When building a similar evaluation, then you will want to use a private repository.
+helping build CLI applications. In reality, a lot of these answers might come from the model weights 
+itself as it is a very popular public Python library, however the point is to just demonstrate the pattern.
+When building a similar evaluation, then you will want to use a private repository.
 
 > [!TIP]
 > To point this eval at a **private** repository, set `EVAL_HARNESS_GITHUB_TOKEN` in `.env` to a
@@ -22,18 +21,14 @@ For the knowledge base I am using the [forgetful](https://github.com/ScottRBK/fo
 own MCP memory system for AI Agents. 
 
 The evaluation as well also demonstrates how you can use [agent-shell](https://github.com/ScottRBK/agent-shell)
-to add and list MCP servers to AI CLI clients. The ability to test agent harnesses with and without
-certain tools is really powerful.
+to add and list MCP servers to AI CLI clients and also how to disable certain tools. The ability to 
+test agent harnesses with and without certain tools is really powerful.
 
-Another thing to comment on at this stage is that perhaps you would be better off measuring these two
-activities in isolation, so an eval for encoding data in there and evaluation for just answering the 
-questions using a pre-seeded knowledge base, however this evaluation is measuring search and retrieval 
-capabilities across two mediums (file system and a vector-graph).
 
 ## Evaluation Details
 
 ###  arrange
-The arrange phase starts by starting the mcp server locally and then adding it to the agent harness
+The arrange phase begins by starting the mcp server locally and then adding it to the agent harness
 as an mcp tool. We also add a pause in here at this point because we need to wait for some of the 
 activity on the MCP server to stand up - i fully admit there is probably a better way of handling this. 
 
@@ -48,12 +43,34 @@ activity on the MCP server to stand up - i fully admit there is probably a bette
             args=["forgetful-ai"],
         )
         await shell.add_mcp_server(forgetful_mcp)
-
-        # pause here for a bit to allow the fastembed model to download
-        time.sleep(60)
 ```
-We then print a list of mcp servers as confirmation before cloning a repo to the directory that we specified
-in the embedded values: 
+
+After this we then wait for the mcp to initalise, given it is running locally we need to wait for
+the first time initialisation of forgetful. We poll the mcp server list of the agent harness to determine
+if the mcp server is ready, we give it a grace period of 2 minutes, which if we exceed we raise a 
+runtime error and fail that particular agents run.
+
+```python
+timeout = 2 * 60
+start_timer = time.time() 
+timer = 0 
+mcp_servers = []  
+while timer < timeout:
+    try:
+        mcp_servers = await shell.list_mcp_servers()
+    except Exception: 
+        pass 
+    if mcp_servers:
+        break 
+    time.sleep(2)
+    timer = time.time() - start_timer 
+
+if not mcp_servers:
+    raise RuntimeError(f"forgetful MCP server failed to initialise withing {timeout}s - aborting eval")
+```
+We then run a subprocess to clone the github repo, if we have a token then we run the auth command, 
+you can in theory skip this step for public repos, I have only left it in there as a demonstration for
+in case you need to evaluate a privte repo, which obvious requires auth to github.
 
 ```python
 # When a private repo is targeted, GH_TOKEN is present in the container env and we
@@ -67,6 +84,7 @@ subprocess.run(
     check=True,
 )
 ```
+
 Once we have the repo cloned we then call agent shell passing the agent information along with our
 encoding prompt, which we populated at the top of the file using a [`read_eval_fixture`](../helpers.md) 
 helper from our [embedded-values](../../README.md#embedded-values). 
