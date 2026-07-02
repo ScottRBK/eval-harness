@@ -3,6 +3,8 @@ name = "eval-harness"
 version = "0.1.0"
 description = "Evaluation Harness for testing Agentic CLI Agents"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.13"
 dependencies = [
     "agent-shell-py>=0.1.15",

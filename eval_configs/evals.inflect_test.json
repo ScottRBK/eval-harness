@@ -1,0 +1,41 @@
+{
+    "evals": [
+        {
+            "number": 5,
+            "eval_dir": "inflection_test_writing",
+            "description": "have the agent write automated tests then mutate code to ensure tests fail",
+            "run_count": 1,
+            "tags": ["python", "bugs"]
+        }
+    ],
+    "agents": [
+        {
+            "agent_type": "opencode",
+            "agent_model":"opencode/big-pickle"
+        },
+        {
+            "agent_type": "copilot_cli",
+            "agent_model":"gpt-5-mini"
+        },
+        {
+            "agent_type": "codex",
+            "agent_model":"gpt-5.4-mini"
+        },
+        {
+            "agent_type": "codex",
+            "agent_model":"gpt-5.5"
+        },
+        {
+            "agent_type": "opencode",
+            "agent_model": "llama.cpp ai/qwen3.6-27b-8Q"
+        },
+        {
+            "agent_type": "claude_code",
+            "agent_model":"haiku"
+        },
+        {
+            "agent_type": "claude_code",
+            "agent_model":"sonnet"
+        }
+    ]
+}

@@ -1,0 +1,100 @@
+[
+  {
+    "name": "canary_comment_only",
+    "description": "comment text changed only - a behavioural suite must NOT fail on this",
+    "canary": true,
+    "find": "    # Turn unwanted chars into the separator",
+    "replace": "    # Convert any unwanted chars into the separator"
+  },
+  {
+    "name": "canary_equivalent_refactor",
+    "description": "ordinalize() refactored via a local variable - same behaviour, new AST",
+    "canary": true,
+    "find": "    return \"{}{}\".format(number, ordinal(number))",
+    "replace": "    suffix = ordinal(number)\n    return \"{}{}\".format(number, suffix)"
+  },
+  {
+    "name": "ordinal_teens_boundary",
+    "description": "ordinal() drops 12 from the 11/12/13 teens special case, so 12 -> '12nd'",
+    "canary": false,
+    "find": "    if number % 100 in (11, 12, 13):",
+    "replace": "    if number % 100 in (11, 13):"
+  },
+  {
+    "name": "ordinal_default_suffix",
+    "description": "ordinal() default suffix becomes 'st', so 4 -> '4st' and 10 -> '10st'",
+    "canary": false,
+    "find": "        }.get(number % 10, \"th\")",
+    "replace": "        }.get(number % 10, \"st\")"
+  },
+  {
+    "name": "camelize_lower_first",
+    "description": "camelize(word, False) no longer lowercases an uppercase first letter",
+    "canary": false,
+    "find": "        return string[0].lower() + camelize(string)[1:]",
+    "replace": "        return string[0] + camelize(string)[1:]"
+  },
+  {
+    "name": "dasherize_first_only",
+    "description": "dasherize() only replaces the first underscore",
+    "canary": false,
+    "find": "    return word.replace('_', '-')",
+    "replace": "    return word.replace('_', '-', 1)"
+  },
+  {
+    "name": "humanize_id_anywhere",
+    "description": "humanize() strips '_id' anywhere in the word, not just as a trailing suffix",
+    "canary": false,
+    "find": "    word = re.sub(r\"_id$\", \"\", word)",
+    "replace": "    word = re.sub(r\"_id\", \"\", word)"
+  },
+  {
+    "name": "humanize_no_lowercase",
+    "description": "humanize() no longer lowercases the rest of the word",
+    "canary": false,
+    "find": "    word = re.sub(r\"(?i)([a-z\\d]*)\", lambda m: m.group(1).lower(), word)",
+    "replace": "    word = re.sub(r\"(?i)([a-z\\d]*)\", lambda m: m.group(1), word)"
+  },
+  {
+    "name": "uncountable_rice_removed",
+    "description": "'rice' removed from UNCOUNTABLES, so pluralize('rice') -> 'rices'",
+    "canary": false,
+    "find": "    'rice',\n",
+    "replace": ""
+  },
+  {
+    "name": "pluralize_bus_rule",
+    "description": "pluralize() bus rule broken: 'bus' -> 'bues' instead of 'buses'",
+    "canary": false,
+    "find": "    (r\"(?i)(bu)s$\", r'\\1ses'),",
+    "replace": "    (r\"(?i)(bu)s$\", r'\\1es'),"
+  },
+  {
+    "name": "singularize_movies_rule",
+    "description": "singularize() movies rule broken: 'movies' -> 'movi' instead of 'movie'",
+    "canary": false,
+    "find": "    (r\"(?i)(m)ovies$\", r'\\1ovie'),",
+    "replace": "    (r\"(?i)(m)ovies$\", r'\\1ovi'),"
+  },
+  {
+    "name": "parameterize_squeeze_three",
+    "description": "parameterize() only squeezes runs of 3+ separators; doubles survive",
+    "canary": false,
+    "find": "        string = re.sub(r'%s{2,}' % re_sep, separator, string)",
+    "replace": "        string = re.sub(r'%s{3,}' % re_sep, separator, string)"
+  },
+  {
+    "name": "underscore_first_dash_only",
+    "description": "underscore() only converts the first dash to an underscore",
+    "canary": false,
+    "find": "    word = word.replace(\"-\", \"_\")",
+    "replace": "    word = word.replace(\"-\", \"_\", 1)"
+  },
+  {
+    "name": "pluralize_empty_guard",
+    "description": "pluralize() loses its empty-string guard, so '' -> 's'",
+    "canary": false,
+    "find": "    if not word or word.lower() in UNCOUNTABLES:",
+    "replace": "    if word.lower() in UNCOUNTABLES:"
+  }
+]

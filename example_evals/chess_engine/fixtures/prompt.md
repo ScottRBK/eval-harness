@@ -21,11 +21,13 @@ Full standard chess: pawn pushes (single and double), captures, en passant, all 
 queen-side, with all legality conditions), check detection, and the rule that a move is illegal
 if it leaves your own king in check (pins, discovered checks, double checks).
 
-## Constraints (these are graded)
+## Constraints
 
 - **Do not change the public API.** Keep the names `Board` and `Move` and the exact signatures of
-  the three methods above. Hidden tests compile against them — any signature change fails the build
-  and scores zero. You may add public or private items, but do not remove or rename these.
-- **Standard library only.** Do not add any dependencies to `Cargo.toml` (no `dependencies`,
-  `dev-dependencies`, or `build-dependencies`). Using any third-party crate scores zero.
+  the three methods above. Downstream code already compiles against them, so any rename or
+  signature change breaks every consumer of this crate. You may add public or private items, but
+  do not remove or rename these.
+- **Standard library only.** This crate has a zero-dependency policy so that it stays trivially
+  auditable. Do not add anything to `Cargo.toml` (no `dependencies`, `dev-dependencies`, or
+  `build-dependencies`).
 - **Rust only.** Implement everything in this crate.

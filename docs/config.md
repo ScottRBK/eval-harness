@@ -13,8 +13,8 @@ prefixed with `EVAL_HARNESS_`
 |--------|----|-----------|-------|
 |`CLAUDE_CODE_OAUTH_TOKEN`|string|OAuth token to use with the claude code, obtained by typing `claude setup-token`||
 |`OPENCODE_CREDENTIALS_LOC`|string|Path to the OpenCode `auth.json`; it is copied and mounted into the container for OpenCode agents|`~/.local/share/opencode/auth.json`|
-|`COPILOT_MOUNT`|string|Credentials mount for the Copilot CLI agent (not yet implemented)||
-|`CODEX_MOUNT`|string|Credentials mount for the Codex agent (not yet implemented)||
+|`CODEX_CREDENTIALS_LOC`|string|Path to the Codex `auth.json` (from `codex login`); a throwaway copy is mounted into the container so Codex can refresh the token without touching the host file|`~/.codex/auth.json`|
+|`COPILOT_GITHUB_TOKEN`|string|GitHub token for the Copilot CLI agent, passed to the container as an environment variable. See [authorisation](authorisation.md) for the required permissions||
 |`GITHUB_TOKEN`|string|Harness-level GitHub token for cloning private repos inside the container. Injected as `GH_TOKEN`; unset means public-repo clones only. See [authorisation](authorisation.md#private-repositories-harness-level-github-token)||
 |`OUTPUT_DIR`|string|Parent directory for run output; each run creates a `<timestamp>_<session_id>` subfolder here|`output`|
 |`RESULTS_FILENAME`|string|Name of the JSON results file written inside each run's folder|`results.json`|
@@ -22,6 +22,7 @@ prefixed with `EVAL_HARNESS_`
 |`LOG_LEVEL`|string|Level for the root logger (the harness's own logging)|`DEBUG`|
 |`DOCKER_LOG_LEVEL`|string|Level for the `docker` library logger, which is noisy at `INFO`|`WARNING`|
 |`URLLIB3_LOG_LEVEL`|string|Level for the `urllib3` logger, which is noisy at `INFO`|`WARNING`|
+|`EVALS_PACKAGE`|string|Python package containing the evaluation classes; each eval is a subpackage of it, referenced by `eval_dir`|`example_evals`|
 |`MAX_AGENT_CONCURRENCY`|int|Maximum number of processing chains run in parallel. An ungrouped agent is its own chain; each processing group is a single chain|`4`|
 |`ARRANGE_TIMEOUT_SECONDS`|int|Timeout for the arrange phase of each eval, in seconds|`3600`|
 |`ACT_TIMEOUT_SECONDS`|int|Timeout for the act phase of each eval, in seconds|`3600`|
@@ -32,13 +33,14 @@ All evaluation configuration comes from an evaluation file. See an example in [e
 An evaluation file contains two lists - `evals` and `agents`
 
 ### Evals Configuration 
-Each entry in `evals` selects one evaluation under `src/evals/` to run. Every agent in the file
-runs every eval. All fields are required and unknown keys are rejected.
+Each entry in `evals` selects one evaluation from the evals package (`EVALS_PACKAGE`, default
+`example_evals`) to run. Every agent in the file runs every eval. All fields are required and
+unknown keys are rejected.
 
 |Field|Type|Description|Example|
 |-----|----|-----------|-------|
 |`number`|int|Numeric identifier for the eval; shown in logs and written to the results|`2`|
-|`eval_dir`|string|Package name under `src/evals/` that implements the eval. The eval class is the PascalCase form of this name (`inflection_bug_fix` → `InflectionBugFix`)|`inflection_bug_fix`|
+|`eval_dir`|string|Package name under the evals package (`EVALS_PACKAGE`) that implements the eval. The eval class is the PascalCase form of this name (`inflection_bug_fix` → `InflectionBugFix`)|`inflection_bug_fix`|
 |`description`|string|Human-readable summary, shown in logs and the TUI|`bug fixes in the inflection library`|
 |`run_count`|int|Recorded against the eval in the results (`eval_run_count`). Used to determine the number of times that the evaluation is run against the agent|`1`|
 |`tags`|list[string]|Free-form labels recorded in the results (`eval_tags`). Not used for filtering or selection|`["python", "bugs"]`|
@@ -62,7 +64,7 @@ the file.
 
 |Field|Type|Description|Example|
 |-----|----|-----------|-------|
-|`agent_type`|string|The CLI agent to run. One of `claude_code`, `opencode`, `gemini_cli`, `copilot_cli`, `codex`; only `claude_code` and `opencode` are implemented today|`opencode`|
+|`agent_type`|string|The CLI agent to run. One of `claude_code`, `opencode`, `copilot_cli`, `codex` (`gemini_cli` and `pi` are not yet implemented)|`opencode`|
 |`agent_model`|string|Model identifier for the agent. Agent-specific: `haiku`/`sonnet`/`opus` for `claude_code`, or a `provider/model` from the OpenCode config for `opencode`|`llama.cpp ai/qwen3.6-27b-8Q`|
 |`effort`|string|Optional — reasoning-effort level passed to the agent at runtime via the `AGENT_EFFORT` env var (`claude_code` applies it as its `--effort` flag; `opencode` currently accepts but ignores it). Also appended to the agent's log filename and recorded in the results (`agent_effort`), so agents sharing a type and model stay distinguishable|`high`|
 |`processing_group`|string|Optional — agents sharing a group run serially, never concurrently. Ungrouped agents and separate groups run in parallel up to `MAX_AGENT_CONCURRENCY`. Use it to pin agents that share a backend such as a single inference server|`bosman-server`|

@@ -27,7 +27,15 @@
             "description": "creates a chess engine in rust",
             "run_count": 3,
             "tags": ["rust", "feature"]
+        },
+        {
+            "number": 5,
+            "eval_dir": "inflection_test_writing",
+            "description": "have the agent write automated tests then mutate code to ensure tests fail",
+            "run_count": 1,
+            "tags": ["python", "tests"]
         }
+
     ],
     "agents": [
         {
@@ -46,6 +54,6 @@
         {
             "agent_type": "opencode",
             "agent_model": "opencode/big-pickle"
-        }
+        },
     ]
 }

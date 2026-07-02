@@ -35,9 +35,10 @@ The harness passes `AGENT_TYPE` and `AGENT_MODEL` to the container via env vars;
 and builds an `AgentShell` from `agent_shell` (the unified CLI-agent wrapper installed in the image).
 
 ## Evaluations
-Each of the example evaluations map to an evaluation patterns that are located in `docs/eval_patterns`,
-documentation also exists for patterns in the `skills/eval_creation/patterns`, be sure if you ever add 
-or update a pattern to include documentation in both places.
+Each of the example evaluations maps to an evaluation pattern documented in `docs/eval_patterns`.
+
+Any change to the eval architecture or its constraints (the protocol, method extraction, embedded
+values) must include a review and update of README.md, AGENTS.md and the skills under `skills/`.
 
 ## Logs
 Each evaluation run has its own output folder (specified in `settings.py` with the variable `OUTPUT_DIR`)

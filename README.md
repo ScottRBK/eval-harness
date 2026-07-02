@@ -54,14 +54,18 @@ docker build -t eval-harness-rust:latest -f src/docker/rust/Dockerfile src/docke
 ```bash 
 uv run main.py
 ```
+> [!TIP]
+> If you would like to use an AI Agent to help you build evals it is recommended you install the 
+> [skills](skills/) that accompany this repository.
+
 ## [Configration](docs/config.md)
 
 # Harness Architecture
 
 ![Eval Harness Architecture](docs/images/eval_harness_architecture.png)
 
-The harness is structured in a way that there is an evaluation protocol, any evaluation must implement
-the same methods within the protocol.
+The harness is structured in a way that there is an [evaluation protocol](src/evaluation_file_protocol.py), 
+any evaluation must implement the same methods within the protocol.
 
 When the harness is run it ingests an evaluation configuration file (the default is [evals.json](evals.json)), which determines
 which evaluations are in scope of the evaluation run, and also which agent harness/model combinations
