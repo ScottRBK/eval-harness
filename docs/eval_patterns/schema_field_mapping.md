@@ -1,4 +1,4 @@
-# Schema Field Mapping
+# [Schema Field Mapping](../../example_evals/saleor_spree_mapping)
 
 This eval measures two things:
 1. The ability of an agent to read two unfamiliar codebases and reason about how their data models
@@ -18,9 +18,8 @@ The agent is handed two pinned forks on the `eval-v1` ref -
 [ScottRBK/spree](https://github.com/ScottRBK/spree) (the target) - and asked to map the fields of
 the **Order** entity from one to the other. Saleor describes its Order as GraphQL SDL and Spree as
 an OpenAPI JSON schema, so the agent has to read two different schema formats and decide, field by
-field, what maps to what and how the value would have to be transformed to get there. The full
-ground-truth mapping, the four `transform` values, and the judgement calls behind the trickier rows
-are catalogued in [Saleor ↔ Spree Mapping](../evals.md#saleor--spree-mapping).
+field, what maps to what and how the value would have to be transformed to get there. The four
+`transform` values and the scoring contract are laid out below.
 
 The deliverable is a single CSV with three columns:
 
@@ -168,5 +167,5 @@ across all 22 rows scores `1`. As everywhere else the body is wrapped in a `try/
 > two live schemas and deliberately keeps only the rows with one defensible answer - the genuinely
 > N:M or shape-mismatched fields (metadata, tax/money sprawl, vouchers) are left out of the file
 > entirely rather than scored, so omission, not an explicit ignore list, is how the debatable fields
-> are handled. If you build your own mapping eval, the
-> [catalogue entry](../evals.md#saleor--spree-mapping) shows how those calls were made.
+> are handled. If you build your own mapping eval, the same principle applies - keep only the rows
+> with one defensible answer and let omission handle the rest.

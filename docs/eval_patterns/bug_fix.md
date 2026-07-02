@@ -1,4 +1,4 @@
-# Bug Fix with Automated Tests
+# [Bug Fix with Automated Tests](../../example_evals/inflection_bug_fix)
 
 This eval measures two things:
 1. The ability of an agent to diagnose and fix bugs in a codebase it has never seen before.
@@ -14,17 +14,17 @@ ground truth to grade against.
 
 The fork lives at [ScottRBK/inflection](https://github.com/ScottRBK/inflection) on the `eval-v1`
 ref, and it has **three bugs injected** into `inflection/__init__.py`. Those three bugs break
-**34** of the 455 tests. The agent's job is simply to make them pass again. For the full catalogue
-of what was changed and why - and how a couple of the bugs claim a second victim through a call
-dependency - see the [Inflection Bug Fix](../evals.md#inflection-bug-fix) entry in the eval
-catalogue.
+**34** of the 455 tests. The agent's job is simply to make them pass again. Two of the three
+claim a second victim through a call dependency - `pluralize` breaks `tableize` (which calls it),
+and `camelize` breaks the `underscore` doctest (whose example calls `camelize`) - so fixing the root
+cause can green tests the agent never directly touched.
 
 The defining feature of this pattern is that, unlike a hidden-test eval, **the agent can see and
 edit the test file**. It lives right there in the workspace and we even tell the agent to run it.
 That makes the whole eval an exercise in tamper-proof scoring: everything below is built so that the
 score reflects real production fixes and not an agent quietly rewriting a test to pass. The two ways
 to keep tests honest - restore-from-git (used here) versus fixture-injection - are contrasted in
-[Hiding tests from the agent](../evals.md#hiding-tests-from-the-agent).
+the [new feature](./new_feature.md) pattern, which sits at the opposite end of that spectrum.
 
 > [!TIP]
 > `inflection` is a public library, so the clone here runs anonymously and is only meant to
@@ -156,4 +156,4 @@ of the container.
 > pattern is the right choice when seeing the tests doesn't reveal the answer. When the test
 > contents themselves would hand the agent the solution, reach for **fixture-injection** instead -
 > where the harness owns the test bytes and writes them in at score time - as demonstrated by the
-> [chess engine](../evals.md#chess-engine) eval.
+> [new feature](./new_feature.md) eval.

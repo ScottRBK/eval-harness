@@ -1,4 +1,4 @@
-# Search with Questions and Answers 
+# [Search with Questions and Answers](../../example_evals/encode_repo_forgetful)
 
 This eval measures two things:
 1. The ability of an agent to encode information about a github repo in to a knowledge base.

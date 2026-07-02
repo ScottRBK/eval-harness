@@ -23,8 +23,8 @@ Anti-cheat layers:
   killed: a suite that fails on them is diffing source bytes or AST rather than testing
   behaviour, and scores zero.
 - Every real mutant is chosen to survive the module's own docstring examples, so delegating
-  to doctest catches nothing; score() also deletes pytest config files before running so
-  nothing can smuggle in --doctest-modules (upstream tox.ini carries exactly that addopt).
+  to doctest catches nothing. This is a load-bearing invariant of the mutant set - keep it in
+  mind when adding mutants.
 - act() disallows web search/fetch - the upstream suite is public.
 """
 from src.helpers.file_helper import read_eval_fixture
@@ -75,8 +75,6 @@ class InflectionTestWriting:
         subprocess.run(
             ["rm", "-f",
              os.path.join(REPO_DIR, "test_inflection.py"),
-             # tox.ini carries [pytest] addopts=--doctest-modules; drop it so bare pytest
-             # behaves the same for the agent during act as it will during score
              os.path.join(REPO_DIR, "tox.ini")],
             check=True,
         )
@@ -119,11 +117,6 @@ class InflectionTestWriting:
                     print(f"fixture error: find-string for '{mutant['name']}' not unique")
                     print("EVAL_SCORE=0.0")
                     return
-
-            # The suite must run under bare pytest: remove any config the agent may have added
-            # (or recreated) so nothing smuggles in addopts such as --doctest-modules.
-            for config in ("pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml"):
-                subprocess.run(["rm", "-f", os.path.join(REPO_DIR, config)])
 
             def run_suite(module_source, junit_path=None):
                 with open(module_path, "w") as f:

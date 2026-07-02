@@ -24,6 +24,7 @@ appropriate guide for building an evaluation for that pattern:
 |[Bug Fix with Automated Tests](../../docs/eval_patterns/bug_fix.md)|Ask the agent to fix bugs in a repo that are causing automated tests to fail, this eval also demonstrates how to restore the original tests to ensure the agent hasn't modified them to pass|inflection_bug_fix|
 |[Schema Field Mapping](../../docs/eval_patterns/schema_field_mapping.md)|Instructs the agent to create a field mapping between two data models and output the values to a CSV file for scoring, an alternative to the JSON question and answers|saleor_spree_mapping|
 |[New Feature with Automated Tests](../../docs/eval_patterns/new_feature.md)|Ask an agent to implement a new feature with a predefined API contract and run hidden automated tests after the agent has completed their work, it also demonstrates how you can make use of extending the base docker image, in this example we add rustup to allow for the agent to use cargo to build and test in Rust|chess_engine|
+|[Test Authoring](../../docs/eval_patterns/test_authoring.md)|The inverse of the Bug Fix pattern: hand the agent the code with its test suite deleted and ask it to write one, then grade the suite by mutation testing - the harness applies small behavioural faults to the module and scores the fraction the agent's tests catch|inflection_test_writing|
 
 ## Constraints
 The harness imposes a few rules on every eval class; a run will fail if they are broken:

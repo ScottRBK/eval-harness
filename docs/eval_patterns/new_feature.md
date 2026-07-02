@@ -1,4 +1,4 @@
-# New Feature with Automated Tests
+# [New Feature with Automated Tests](../../example_evals/chess_engine)
 
 This eval measures two things:
 1. The ability of an agent to implement a non-trivial new feature against a fixed, pre-defined API
@@ -11,18 +11,15 @@ For this example the agent implements a standard chess move generator in Rust. W
 scaffolded fork, [ScottRBK/rust-chess](https://github.com/ScottRBK/rust-chess) on the `eval-v1`
 ref, whose `src/lib.rs` exposes a frozen `Board` API - `from_fen`, `legal_moves`, and `make_move`
 - with every method body stubbed out as `unimplemented!()`. The agent's job is to fill those bodies
-in so the crate becomes a correct, fully-legal chess engine. For the exact contract, the six
-positions we grade against, and how the ground truth was validated, see the
-[Chess Engine](../evals.md#chess-engine) entry in the eval catalogue.
+in so the crate becomes a correct, fully-legal chess engine.
 
 Two reusable capabilities are what make this pattern worth its own write-up.
 
 The first is grading against a **hidden test suite** using *fixture-injection*. This sits at the
 opposite end of a spectrum from the restore-from-git approach in [bug_fix](./bug_fix.md), and it is
 chosen for exactly the reason that one isn't: here the tests would hand the agent the answer, so
-they never touch the workspace until score time. The two approaches - and the single question that
-decides between them - are contrasted in
-[Hiding tests from the agent](../evals.md#hiding-tests-from-the-agent).
+they never touch the workspace until score time. The single question that decides between the two
+approaches is whether seeing the tests would reveal the answer.
 
 The second is running on a **custom Docker image**. A chess engine needs a Rust toolchain, so this
 eval runs on `eval-harness-rust:latest` rather than the default image.
