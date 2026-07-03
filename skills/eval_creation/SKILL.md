@@ -10,6 +10,7 @@ This guide covers how to produce an evaluation that tests large language models 
 agentic coding harnesses on a particular scenario or task. It does so using the
 [eval-harness](https://github.com/ScottRBK/eval-harness), an agentic cli evaluation tool.
 
+
 ## Understand the architecture
 Read the README's [harness architecture](../../README.md#harness-architecture) section first.
 
@@ -50,6 +51,7 @@ default value in `src.config.settings.settings.EVALS_PACKAGE`).
 1. Generate the class with PascalCasing of the directory you created for the evaluation.
 1. Generate the three methods (arrange, act and score) and embedded values as outlined in the
 [architecture description](../../README.md#harness-architecture) for the class.
+1. Add import the newly created class in the `__init__` file in the evals folder .
 1. Review the pattern explanations and then complete the necessary methods in the class.
 1. Agree with the user if it is okay to generate a .json file (do not overwrite the `evals.json`)
 for the evals configuration against a single agent configuration that they prefer to use for
@@ -62,8 +64,18 @@ any issues that might occur.
 ## Additional information
 
 ### general guidelines
+1. The container persists between phases, so anything written in `arrange` can be seen by the agent 
+in the `act` phase. If you must introduce code for the evaluation that the agent should not see then
+you should do so during the `score` phase.
 1. In any of the prompts or phases where there is interaction with the agent being tested, **NEVER**
-give an indication that they are beinrevaluated. 
+give an indication that they are being evaluated. 
+1. Evaluations should remain deterministic with the exception of the call out to the large language 
+mode by the agent harness in agent shell.
+1. A good eval is one that scores a correct solution high and an incorrect solution low - do not over 
+complicate.
+1. Keep the work the harness is doing simple, while making the task the agent is asked to perform and
+be measured against the complex bit. Simple evaluations to hard tasks make great evaluations.
+
 
 ### agent-shell
 The eval-harness uses the [agent-shell](https://github.com/ScottRBK/agent-shell) package to prompt
