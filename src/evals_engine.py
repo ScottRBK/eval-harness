@@ -55,6 +55,20 @@ def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None, session_id
         aee.status = AgentEvalStatus.PROCESSING
         progress.put("update")
 
+        probe = DockerRunner(
+            agent_type=aee.agent_config.agent_type,
+            agent_model=aee.agent_config.agent_model,
+            agent_effort=aee.agent_config.effort,
+            logger=log,
+            session_id=session_id,
+        )
+        health = probe.health_check(image=settings.BASE_IMAGE)
+        if not health.healthy:
+            aee.status = AgentEvalStatus.UNHEALTHY
+            log.error(f"Agent failed health_check")
+            progress.put("update")
+            return 
+
         for eval_exec in aee.evals_executions:
             log.info(f"Loading Evalaution {eval_exec.eval.number} - {eval_exec.eval.description}")
             eval_mod = _load_eval_class(eval_exec.eval.eval_dir)
@@ -84,11 +98,7 @@ def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None, session_id
                 logger=log,
                 session_id=session_id,
             )
-
-            # Repeat the eval run_count times. Each run is a fresh container
-            # (arrange -> act -> score). Score is the mean across runs - a noisy
-            # measurement averaged into a stable estimate - while tokens and time
-            # are totals, the real cost every run actually spends.
+            
             run_count = max(eval_exec.eval.run_count, 1)
             run_scores: list[float] = []
             total_tokens = 0
@@ -171,6 +181,11 @@ def run_session(
                 )
                    #this is fine because in run agent we are making it as FAILED so can swallow it
                 continue
+            if aee.status == AgentEvalStatus.UNHEALTHY:
+                logger.error(
+                    f"Agent {aee.agent_config.agent_type}-{aee.agent_config.agent_model} "
+                    f"skipped as unhealthy before any evals ran"
+                )
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = [pool.submit(_run_chain, chain) for chain in chains] 
@@ -181,7 +196,8 @@ def run_session(
                 continue
             on_update()
 
-    return [aee for aee in agent_eval_executions if aee.status == AgentEvalStatus.FAILED]
+    return [aee for aee in agent_eval_executions 
+            if aee.status in (AgentEvalStatus.FAILED,AgentEvalStatus.UNHEALTHY)]
 
 def _load_eval_class(eval_dir: str):
     module = importlib.import_module(f"{settings.EVALS_PACKAGE}.{eval_dir}")

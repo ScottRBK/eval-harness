@@ -21,7 +21,7 @@ from uuid import uuid4
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from agent_shell.models.agent import AgentType
+from agent_shell.models.agent import AgentType, HealthCheckResult
 
 from src.evals_engine import run_agent, run_session, _load_eval_class, _method_to_script
 from src.models import (
@@ -89,6 +89,12 @@ def fake_runner(monkeypatch):
     runner was built with), ``efforts`` (the agent_effort each runner was built
     with) and ``calls`` (the kwargs each ``docker_run`` saw).
     Index advancement is locked so the recorder is safe under concurrent agents.
+
+    Each returned runner also exposes a ``health_check`` stub defaulting to a
+    healthy verdict. A test can flip ``recorder.health_result`` to a
+    ``HealthCheckResult(healthy=False, ...)`` (the probe returns it; run_agent
+    marks the agent UNHEALTHY and skips all evals) or an ``Exception`` (the
+    probe raises; run_agent marks the agent FAILED and re-raises).
     """
 
     def _install(results):
@@ -99,6 +105,8 @@ def fake_runner(monkeypatch):
             calls=[],
             results=list(results),
             idx=0,
+            health_calls=[],
+            health_result=HealthCheckResult(healthy=True),
         )
         lock = threading.Lock()
 
@@ -106,6 +114,12 @@ def fake_runner(monkeypatch):
             recorder.constructed.append((agent_type, agent_model))
             recorder.efforts.append(agent_effort)
             recorder.session_ids.append(session_id)
+
+            def _health_check(image):
+                recorder.health_calls.append(image)
+                if isinstance(recorder.health_result, Exception):
+                    raise recorder.health_result
+                return recorder.health_result
 
             def _docker_run(arrange_script, act_script, score_script, image):
                 recorder.calls.append(
@@ -138,7 +152,7 @@ def fake_runner(monkeypatch):
                         )
                 return result
 
-            return SimpleNamespace(docker_run=_docker_run)
+            return SimpleNamespace(docker_run=_docker_run, health_check=_health_check)
 
         monkeypatch.setattr("src.evals_engine.DockerRunner", _factory)
         return recorder
@@ -349,8 +363,9 @@ class TestRunAgent:
         # Act
         run_agent(aee, Queue())
 
-        # Assert — every runner is built for this agent's type/model
-        assert recorder.constructed == [(AgentType.OPENCODE, "m-x")] * 2
+        # Assert — the pre-flight health probe + one per-eval runner, all built
+        # for this agent's type/model
+        assert recorder.constructed == [(AgentType.OPENCODE, "m-x")] * 3
 
     def test_forwards_agent_effort_to_the_runner(self, fake_runner, fake_eval_loading):
         # Arrange — the configured reasoning effort must reach DockerRunner, which
@@ -362,8 +377,8 @@ class TestRunAgent:
         # Act
         run_agent(aee, Queue())
 
-        # Assert — the runner was constructed with the agent's configured effort
-        assert recorder.efforts == ["high"]
+        # Assert — the health probe + the per-eval runner both carry the effort
+        assert recorder.efforts == ["high", "high"]
 
     def test_passes_three_distinct_phase_scripts(self, fake_runner, fake_eval_loading):
         # Arrange — guards the host/container split: arrange/act/score stay separate
@@ -553,6 +568,62 @@ class TestRunAgentFailure:
 
 
 # --------------------------------------------------------------------------- #
+# B2. run_agent — health check integration (UNHEALTHY vs FAILED split)
+# --------------------------------------------------------------------------- #
+
+
+class TestRunAgentHealthCheck:
+    """The pre-flight probe decides, before any eval runs, whether the agent is
+    reachable. The two outcomes must land in distinct statuses:
+
+      - probe returns unhealthy -> agent UNHEALTHY, no evals run, no raise
+      - probe raises            -> agent FAILED, re-raised so run_session collects it
+
+    E3 pins the clean-return decision: had run_agent raised on unhealthy, the
+    except block would have clobbered UNHEALTHY -> FAILED -- exactly the bug the
+    split exists to avoid. E5 pins the other half: real infra failure still
+    propagates as FAILED.
+    """
+
+    def test_unhealthy_probe_marks_agent_unhealthy_and_skips_evals(
+        self, fake_runner, fake_eval_loading
+    ):
+        # Arrange — probe returns unhealthy; one eval would otherwise run
+        fake_eval_loading()
+        recorder = fake_runner([(1.0, 1.0)])
+        recorder.health_result = HealthCheckResult(healthy=False, exception="backend down")
+        aee = _make_aee(["e1"])
+        progress: Queue = Queue()
+
+        # Act — must NOT raise; a raise would let the except block overwrite
+        # UNHEALTHY with FAILED, collapsing the distinction the split exists for.
+        run_agent(aee, progress)
+
+        # Assert
+        assert aee.status == AgentEvalStatus.UNHEALTHY
+        # probe ran once, against the base image; no eval containers were started
+        assert recorder.health_calls == ["eval-harness:latest"]
+        assert recorder.calls == []
+
+    def test_probe_raising_marks_failed_and_propagates(
+        self, fake_runner, fake_eval_loading
+    ):
+        # Arrange — a real infra failure (missing image, exec crash) raises out
+        # of the probe rather than returning an unhealthy verdict; run_agent must
+        # mark FAILED and re-raise so run_session can collect the failure.
+        fake_eval_loading()
+        recorder = fake_runner([(1.0, 1.0)])
+        recorder.health_result = RuntimeError("probe boom")
+        aee = _make_aee(["e1"])
+
+        # Act / Assert
+        with pytest.raises(RuntimeError, match="probe boom"):
+            run_agent(aee, Queue())
+        assert aee.status == AgentEvalStatus.FAILED
+        assert recorder.calls == []  # no evals ran
+
+
+# --------------------------------------------------------------------------- #
 # C. run_agent — concurrent agents (real threads, the way main runs it)
 # --------------------------------------------------------------------------- #
 
@@ -677,6 +748,60 @@ class TestRunSession:
 
         # Assert
         assert len(calls) == 4
+
+
+# --------------------------------------------------------------------------- #
+# D2. run_session — UNHEALTHY surfaces distinctly from FAILED
+# --------------------------------------------------------------------------- #
+
+
+class TestRunSessionHealthSplit:
+    """The point of the new UNHEALTHY status: a caller can tell 'model backend
+    down' from 'eval code crashed'. An unhealthy agent and a failed agent in the
+    same session must both surface in the returned list with their distinct
+    statuses, while a healthy agent is excluded.
+
+    Uses ``recording_run_agent`` (which swaps in a fake ``run_agent``), so the
+    probe/docker layer is bypassed entirely and the test asserts purely on what
+    ``run_session``'s return filter does with the statuses the chain sets.
+    """
+
+    def test_unhealthy_and_failed_agents_both_surface_with_distinct_statuses(
+        self, monkeypatch
+    ):
+        # Arrange — three agents: one completes, one comes back UNHEALTHY, one
+        # comes back FAILED. Mirror run_agent's real contract: failed raises
+        # (so _run_chain logs and swallows it), unhealthy returns cleanly with
+        # the status already set (so _run_chain logs the 'skipped' line).
+        def _per_model_run_agent(aee, progress, run_dir=None, session_id=None):
+            model = aee.agent_config.agent_model
+            aee.status = {
+                "ok-model": AgentEvalStatus.COMPLETED,
+                "down-model": AgentEvalStatus.UNHEALTHY,
+                "fail-model": AgentEvalStatus.FAILED,
+            }[model]
+            progress.put("update")
+            if model == "fail-model":
+                raise RuntimeError("eval crash")
+
+        monkeypatch.setattr("src.evals_engine.run_agent", _per_model_run_agent)
+
+        healthy = _make_aee(["e_h"], agent_model="ok-model")
+        unhealthy = _make_aee(["e_u"], agent_model="down-model")
+        failed = _make_aee(["e_f"], agent_model="fail-model")
+
+        # Act
+        returned = run_session(
+            [healthy, unhealthy, failed], on_update=lambda: None, max_workers=3
+        )
+
+        # Assert — the failed and unhealthy agents are both returned, each with
+        # its own status; the healthy agent is excluded.
+        by_model = {a.agent_config.agent_model: a for a in returned}
+        assert set(by_model) == {"down-model", "fail-model"}
+        assert by_model["down-model"].status == AgentEvalStatus.UNHEALTHY
+        assert by_model["fail-model"].status == AgentEvalStatus.FAILED
+        assert healthy.status == AgentEvalStatus.COMPLETED
 
 
 # --------------------------------------------------------------------------- #

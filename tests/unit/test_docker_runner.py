@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 from unittest import mock
 
+import docker
 import pytest
 from agent_shell.models.agent import AgentType
 
@@ -67,6 +68,32 @@ def copilot_token(monkeypatch):
 def github_token(monkeypatch):
     monkeypatch.setattr("src.docker_runner.settings.GITHUB_TOKEN", "tok-gh")
     return "tok-gh"
+
+
+@pytest.fixture
+def health_timeout(monkeypatch):
+    monkeypatch.setattr("src.docker_runner.settings.HEALTH_CHECK_TIMEOUT_SECONDS", 60)
+    return 60
+
+
+def _fake_exec_run_client(exec_run_result, stale=False):
+    """A mock docker client for the ``health_check`` path.
+
+    ``exec_run`` returns ``(exit_code, output_bytes)`` in one shot (no streaming),
+    which is the API ``health_check`` uses. ``exec_run_result`` is that tuple.
+    Set ``stale=True`` to simulate a same-named container already existing.
+    """
+    client = mock.Mock()
+    if stale:
+        client.containers.get.return_value = mock.Mock()
+    else:
+        client.containers.get.side_effect = docker.errors.NotFound("absent")
+    container = mock.Mock()
+    container.id = "c"
+    container.exec_run.return_value = exec_run_result
+    client.containers.run.return_value = container
+    client._container = container
+    return client
 
 
 # --------------------------------------------------------------------------- #
@@ -589,3 +616,56 @@ class TestDockerRun:
         # Assert
         env = client.containers.run.call_args.kwargs["environment"]
         assert "GH_TOKEN" not in env
+
+
+# --------------------------------------------------------------------------- #
+# D. health_check — pre-flight agent/model probe (no streaming daemon)
+# --------------------------------------------------------------------------- #
+
+
+class TestHealthCheck:
+    """The pre-flight probe that decides UNHEALTHY vs FAILED before any eval.
+
+    The split lives in how stdout markers vs exit codes map to outcomes:
+      - exit 0 + HEALTHY=False   -> HealthCheckResult(healthy=False)    (UNHEALTHY)
+      - exit 0 + HEALTHY=True    -> HealthCheckResult(healthy=True)     (run)
+      - non-zero / timeout exit  -> raise RuntimeError/TimeoutError      (FAILED)
+
+    H1 guards the regression this whole thing exists for: the deepseek-v4-flash
+    case where the agent CLI prints an error and exits 0, which the old exit-code
+    gate silently scored as a zero pass. H4 guards the split's other half — a
+    real in-container crash must still become FAILED, never get mis-parsed as
+    UNHEALTHY.
+    """
+
+    def test_unhealthy_verdict_parses_from_markers_and_does_not_raise(
+        self, claude_token, health_timeout
+    ):
+        # Arrange — the deepseek regression: CLI printed an error and exited 0.
+        # The verdict is read from stdout markers, not the exit code.
+        client = _fake_exec_run_client(
+            (0, b"HEALTHY=False\nEXCEPTION=Unexpected server error from provider")
+        )
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            result = runner.health_check("img")
+
+        # Assert — returned, not raised; the engine will mark UNHEALTHY and skip
+        assert result.healthy is False
+        assert "Unexpected server error" in (result.exception or "")
+
+    def test_nonzero_exit_raises_runtimeerror_not_unhealthy(
+        self, claude_token, health_timeout
+    ):
+        # Arrange — a real in-container crash (import error, asyncio panic). This
+        # is a harness problem, not 'the model backend is down today', so it must
+        # raise (-> FAILED) rather than return an unhealthy verdict.
+        client = _fake_exec_run_client((2, b"Traceback (most recent call last):\n  Boom"))
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
+
+        # Act / Assert
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            with pytest.raises(RuntimeError, match="health crashed"):
+                runner.health_check("img")

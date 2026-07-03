@@ -8,7 +8,7 @@
             "tags": ["forgetful", "python"]
         },
         {
-            "number": 3,
+            "number": 2,
             "eval_dir": "inflection_bug_fix",
             "description": "bug fixes in the python string transformation lib named inflection",
             "run_count": 3,
@@ -55,22 +55,7 @@
         },
         {
             "agent_type": "opencode",
-            "agent_model":"llama.cpp bosman/qwen3.6-35b",
-            "processing_group": "bosman-server"
-        },
-        {
-            "agent_type": "opencode",
-            "agent_model":"llama.cpp bosman/ornith-1.0",
-            "processing_group": "bosman-server"
-        },
-        {
-            "agent_type": "opencode",
-            "agent_model":"llama.cpp bosman/gpt-oss-120b",
-            "processing_group": "bosman-server"
-        },
-        {
-            "agent_type": "opencode",
-            "agent_model":"llama.cpp bosman/qwen3.6-27b-mtp",
+            "agent_model":"ds4 bosman/deepseek-v4-flash",
             "processing_group": "bosman-server"
         },
         {
@@ -88,10 +73,13 @@
             "agent_model": "sonnet",
             "effort": "low"
         },
-
         {
             "agent_type": "opencode",
             "agent_model": "opencode/big-pickle"
+        },
+        {
+            "agent_type": "codex",
+            "agent_model": "gpt-5.5"
         }
     ]
 }

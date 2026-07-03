@@ -14,6 +14,7 @@ class AgentEvalStatus(StrEnum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+    UNHEALTHY = "unhealthy"
 
 @dataclass
 class AgentProvisioning: 

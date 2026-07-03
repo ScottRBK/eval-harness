@@ -22,7 +22,9 @@ class Settings(BaseSettings):
 
     ### Evaluation Run Configuration ###
     EVALS_PACKAGE: str = "example_evals"
+    BASE_IMAGE: str = "eval-harness:latest"
     MAX_AGENT_CONCURRENCY: int = 4 
+    HEALTH_CHECK_TIMEOUT_SECONDS: int = 3 * 60 
     ARRANGE_TIMEOUT_SECONDS: int = 60 * 60 
     ACT_TIMEOUT_SECONDS: int = 60 * 60 
     SCORE_TIMEOUT_SECONDS: int = 10 * 60 

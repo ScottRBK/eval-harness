@@ -3,7 +3,7 @@ import docker
 import time
 import logging 
 from pathlib import Path
-from agent_shell.models.agent import AgentType
+from agent_shell.models.agent import AgentType, HealthCheckResult
 
 from uuid import UUID
 
@@ -119,6 +119,108 @@ class DockerRunner:
             case _:
                 raise NotImplementedError(f"Agent not implemented for {self._agent_type}")
 
+    def health_check(self, image: str) -> HealthCheckResult:
+        """One-shot agent+model probe, run before any eval.
+
+        A model-backend failure (bad model name, missing/quota'd creds, a
+        provider 'Unexpected server error') is returned as unhealthy rather
+        than raised, so the engine can mark the agent UNHEALTHY and skip it
+        without scoring garbage. True infra failures (image missing,
+        provisioning raise, in-container crash, timeout) propagate as
+        RuntimeError/TimeoutError so the agent is marked FAILED instead —
+        those are harness problems, not 'the model is down today'.
+
+        The verdict is read from markers on stdout, not the process exit
+        code: agent CLIs (opencode especially) print an error and exit 0 on
+        a provider failure, so the script below always exits 0 once it has a
+        verdict and only the `timeout` wrapper / a real crash leave non-zero.
+        """
+        script = (
+            "import asyncio, os\n"
+            "from agent_shell.shell import AgentShell\n"
+            "from agent_shell.models.agent import AgentType\n"
+            "\n"
+            "async def _main():\n"
+            "    shell = AgentShell(agent_type=AgentType(os.environ['AGENT_TYPE']))\n"
+            "    try:\n"
+            "        r = await shell.health_check(cwd='/tmp', model=os.environ['AGENT_MODEL'],\n"
+            "                                  timeout=float(os.environ.get('HEALTH_CHECK_TIMEOUT_SECONDS', '60')))\n"
+            "    except Exception as e:\n"
+            "        print('HEALTHY=False')\n"
+            "        print(f'EXCEPTION={type(e).__name__}: {e}')\n"
+            "        return\n"
+            "    print(f'HEALTHY={r.healthy}')\n"
+            "    if not r.healthy:\n"
+            "        print(f\"EXCEPTION={r.exception or ''}\")\n"
+            "\n"
+            "asyncio.run(_main())\n"
+        )
+
+        client = docker.from_env()
+        prov = self._provision_agent()            # raises on missing creds -> FAILED
+        effort_suffix = f"_{self._agent_effort}" if self._agent_effort else ""
+        container_name = safe_name(
+            f"eval_harness_health_{self._agent_type.value}_{self._agent_model}{effort_suffix}"
+        )
+        try:
+            client.containers.get(container_name).remove(force=True)
+        except docker.errors.NotFound:
+            pass
+
+        labels = {}
+        if self._session_id is not None:
+            labels[_SESSION_LABEL] = str(self._session_id)
+
+        container = client.containers.run(
+            image=image, command=["sleep", "infinity"],
+            volumes=prov.volumes,
+            environment={
+                "AGENT_TYPE": self._agent_type.value,
+                "AGENT_MODEL": self._agent_model,
+                "AGENT_EFFORT": self._agent_effort or "",
+                "HEALTH_CHECK_TIMEOUT_SECONDS": str(settings.HEALTH_CHECK_TIMEOUT_SECONDS),
+                **prov.environment,
+            },
+            detach=True, name=container_name, labels=labels,
+        )
+
+        try:
+            timeout_seconds = settings.HEALTH_CHECK_TIMEOUT_SECONDS
+            # `timeout` enforces the wall clock in-container; exec_run blocks
+            # until the exec finishes so no client-side streaming loop needed.
+            cmd = ["timeout", "--kill-after=10s", str(timeout_seconds),
+                   "python", "-u", "-c", script]
+            exit_code, output = container.exec_run(cmd)
+            buffer = output.decode(errors="replace") if isinstance(output, bytes) else (output or "")
+        finally:
+            try:
+                container.stop(timeout=5)
+                container.remove()
+            except docker.errors.NotFound:
+                pass
+            # probe is a throwaway DockerRunner; clean its staged credential
+            # copies so an unhealthy probe doesn't leak secrets on the host.
+            for d in self._temp_dirs:
+                shutil.rmtree(d, ignore_errors=True)
+            self._temp_dirs.clear()
+
+        self._log.info(f"[health] {buffer.strip()}")
+
+        if exit_code in (124, 137):
+            raise TimeoutError(f"health timed out after {timeout_seconds}s")
+        if exit_code != 0:
+            raise RuntimeError(f"health crashed (exit {exit_code})\n{buffer}")
+
+        healthy = exception = None
+        for line in buffer.splitlines():
+            if line.startswith("HEALTHY="):
+                healthy = line.removeprefix("HEALTHY=").strip() == "True"
+            elif line.startswith("EXCEPTION=") and exception is None:
+                exception = line.removeprefix("EXCEPTION=").strip() or None
+        return HealthCheckResult(
+            healthy=healthy or False,
+            exception=exception or "health check produced no HEALTHY= marker",
+        )
 
     def docker_run(self,
             arrange_script: str,

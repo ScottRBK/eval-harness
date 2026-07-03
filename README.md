@@ -175,6 +175,7 @@ The results file is written as either `results.json` (the default) or `results.c
 
 # Road Map
 - finish roadmap
+- CI/CD
 - extend support to pi coding agent harness
 - extend tui functionality (view results in tui)
 - polish console output

@@ -34,8 +34,14 @@
             "description": "have the agent write automated tests then mutate code to ensure tests fail",
             "run_count": 1,
             "tags": ["python", "tests"]
+        },
+        {
+            "number": 6,
+            "eval_dir": "eval_generator",
+            "description": "Have an agent write the score phase for an evaluation",
+            "run_count": 3,
+            "tags": ["python", "evals"]
         }
-
     ],
     "agents": [
         {
