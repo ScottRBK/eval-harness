@@ -1,13 +1,6 @@
 {
     "evals": [
-        { 
-            "number": 1,
-            "eval_dir": "encode_repo_forgetful",
-            "description": "encode a repo into forgetful and then query forgetful for facts regarding it",
-            "run_count": 2,
-            "tags": ["forgetful", "python"]
-        },
-        {
+       {
             "number": 2,
             "eval_dir": "inflection_bug_fix",
             "description": "bug fixes in the python string transformation lib named inflection",
@@ -54,12 +47,12 @@
         },
         {
             "agent_type": "claude_code",
-            "agent_model": "sonnet",
+            "agent_model": "haiku",
             "effort": "medium"
         },
         {
             "agent_type": "opencode",
-            "agent_model": "opencode/big-pickle"
-        },
+            "agent_model": "ds4 bosman/deepseek-v4-flash"
+        }
     ]
 }

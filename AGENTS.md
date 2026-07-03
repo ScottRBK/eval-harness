@@ -31,6 +31,10 @@ enforced at load by `_load_eval_class`.
 New agents are added by implementing `_setup_<agent>` (returning an `AgentProvisioning` with either
 `environment` vars or staged `volumes`) and adding a case to `_provision_agent`.
 
+Before evals run, each agent/model is gated by a health check (`DockerRunner.health_check()` in
+`src/docker_runner.py`, wired into `run_agent` in `src/evals_engine.py`). An unhealthy probe sets
+`AgentEvalStatus.UNHEALTHY` and skips the eval loop; a probe crash or eval error is `FAILED`.
+
 The harness passes `AGENT_TYPE` and `AGENT_MODEL` to the container via env vars; `act()` reads them 
 and builds an `AgentShell` from `agent_shell` (the unified CLI-agent wrapper installed in the image).
 

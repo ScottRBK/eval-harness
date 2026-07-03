@@ -25,6 +25,7 @@ PALETTE = {
     "accent_alt": "#82aaff",
     "good": "#4ff3a5",
     "bad": "#ff6b6b",
+    "warn": "#ffb454",
     "muted": "#8b93a1",
 }
 
@@ -32,6 +33,7 @@ STATUS_STYLES = {
     AgentEvalStatus.PENDING: f"dim {PALETTE['muted']}",
     AgentEvalStatus.PROCESSING: PALETTE["accent"],
     AgentEvalStatus.COMPLETED: f"bold {PALETTE['good']}",
+    AgentEvalStatus.UNHEALTHY: f"bold {PALETTE['warn']}",
     AgentEvalStatus.FAILED: f"bold {PALETTE['bad']}",
 }
 
