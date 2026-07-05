@@ -143,8 +143,21 @@ if not os.path.exists("/workspace/answers.json"):
     return 
 ```
 
-We then load up the agent answers file from the workspace, and compare the values against the actual answers
-that are held as an embedded value in the score script named `ANSWERS`
+The answers file is agent-controlled output, so an unreadable file, invalid JSON, or an unexpected
+structure is treated as an unsuccessful agent response and also receives a score of zero:
+
+```python
+try:
+    with open("/workspace/answers.json", "r") as f:
+        agent_answers = json.loads(f.read())
+    agent_answers_dict = {a["id"]: a["answer"] for a in agent_answers["questions"]}
+except (OSError, ValueError, KeyError, TypeError):
+    print("EVAL_SCORE=0.0")
+    return
+```
+
+We then compare the agent answers against the actual answers held in the trusted `ANSWERS` embedded
+value in the score script.
 
 This allows us to then compare the two and count the number of correct Answers
 
@@ -167,3 +180,14 @@ score = correct / len(scaffold["questions"])
 print(f"EVAL_SCORE={score:.4f}")
 ```
 
+Errors in the embedded answer data or the scoring implementation are different from malformed agent
+output. They indicate a broken evaluator, so the score phase raises instead of incorrectly assigning
+the agent a zero. A non-zero score-phase exit causes the harness to mark the agent execution as
+`FAILED`:
+
+```python
+except json.JSONDecodeError as e:
+    raise RuntimeError("Invalid embedded ANSWERS JSON") from e
+except Exception as e:
+    raise RuntimeError("Error scoring forgetful encode eval") from e
+```

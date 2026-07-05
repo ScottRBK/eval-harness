@@ -5,7 +5,6 @@ a knowledge base that builds a semantic graph of agent observation and memories.
 The eval then proceeds to have the agent, answer questions about the repo without access to the code
 and just the forgetful knowledge base
 """
-from json import JSONDecodeError
 from src.helpers.file_helper import read_eval_fixture, read_questions
 
 ENCODING_PROMPT = ""
@@ -156,12 +155,10 @@ class EncodeRepoForgetful:
 
             score = correct / len(scaffold["questions"]) 
             print(f"EVAL_SCORE={score:.4f}")
-        except JSONDecodeError as e:
-            print(f"Error parsing answer file: {e}")
-            print("EVAL_SCORE=0.0")
+        except json.JSONDecodeError as e:
+            raise RuntimeError("Invalid embedded ANSWERS JSON") from e
         except Exception as e:
-            print(f"Error scoring forgetful encode eval: {e}")
-            print("EVAL_SCORE=0.0")
+            raise RuntimeError("Error scoring forgetful encode eval") from e
 
         
     
