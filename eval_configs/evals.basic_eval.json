@@ -1,0 +1,17 @@
+{
+    "evals": [
+        {
+            "number": 1,
+            "eval_dir": "basic_eval",
+            "description": "Ask an agent a series of questions about eval-harness",
+            "run_count": 1,
+            "tags": ["python", "questions"]
+        }
+    ],
+    "agents": [
+        {
+            "agent_type": "copilot_cli",
+            "agent_model":"gpt-5-mini"
+        }
+    ]
+}

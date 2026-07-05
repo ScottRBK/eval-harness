@@ -1,0 +1,28 @@
+{
+    "questions": [
+        {
+            "id": "q1",
+            "question": "Does eval-harness have a dependency on pydnatic and pydantic settings?",
+            "choices": {
+                "A": "Just pydantic",
+                "B": "Just pydantic settings",
+                "C": "Both",
+                "D": "Neither"
+            },
+            "answer": "C",
+            "source": "eval-harness/project.toml"
+        },
+        {
+            "id": "q2",
+            "question": "For parallel processing, can all evaluations process in parallel?",
+            "choices": {
+                "A": "Yes you can process all evaluations for all agents in parallel",
+                "B": "No all processing occurs serially",
+                "C": "No, agents process in parallel, up to 3 agents at a time",
+                "D": "No, agents will process in parallel based on the configuration settings/MAX_AGENT_CONCURRENCY"
+            },
+            "answer": "D",
+            "source": "eval-harness/eval_engine.py:190 - mutlithread processing"
+        }
+    ]
+}
