@@ -93,6 +93,13 @@ You can specify an evaluation file when you run the application using:
 uv run main.py -ef <path to evaluation file>
 ```
 
+### Specifying Results output
+The results output file will by default be in JSON, however if you would prefer to output in CSV:
+
+```bash
+uv run main.py -rf csv
+```
+
 
 
 

@@ -18,9 +18,10 @@ src/docker/certs/*.crt
 .codex
 .agents 
 
-# Logs
+# Logs / User specific 
 output/
 logs/
+evals/
 
 #environments
 .env 

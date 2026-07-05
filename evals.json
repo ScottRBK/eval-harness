@@ -52,7 +52,7 @@
         },
         {
             "agent_type": "opencode",
-            "agent_model": "ds4 bosman/deepseek-v4-flash"
+            "agent_model": "opencode/big-pickle"
         }
     ]
 }
