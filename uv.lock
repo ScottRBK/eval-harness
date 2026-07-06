@@ -4,11 +4,11 @@ requires-python = ">=3.13"
 
 [[package]]
 name = "agent-shell-py"
-version = "0.1.15"
+version = "0.1.16"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/db/a7/83c41acc07893568b78c0f79418b21c3f525cc67ffa8336c56cec99bff26/agent_shell_py-0.1.15.tar.gz", hash = "sha256:8569da355563f6c0ab6e8c7ab3e00598973cabee13c1d241206f21bd5aeb24f7", size = 95574, upload-time = "2026-06-28T21:06:00.613Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/dd/e0/b774dab985b3c322b16a118332886fcc4034b5538400a4c3d71563923bc4/agent_shell_py-0.1.16.tar.gz", hash = "sha256:8fa8f45c8c20c339020e9149c20a2606367949c94e6ab5aee3525ef73e4890b1", size = 99873, upload-time = "2026-07-05T13:59:23.694Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d6/89/f1f480524661e5575be1f767994b157164241fd898312586020339cb3c33/agent_shell_py-0.1.15-py3-none-any.whl", hash = "sha256:b71c8728c5da89d13fdc0de6a03d30093a1afbdcb57e75f0c6e177f13f05a32d", size = 32973, upload-time = "2026-06-28T21:05:59.514Z" },
+    { url = "https://files.pythonhosted.org/packages/82/6a/5a1a0d7e3cd18c7a5ddf20fc4c2e7926f004f70b3345762b4d0b5a38afe4/agent_shell_py-0.1.16-py3-none-any.whl", hash = "sha256:32fcddcd0ea9c0c570672a377af120cbe22e75761816d363d483f8aaeb2d54d1", size = 34066, upload-time = "2026-07-05T13:59:22.377Z" },
 ]
 
 [[package]]
@@ -141,7 +141,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-shell-py", specifier = ">=0.1.15" },
+    { name = "agent-shell-py", specifier = ">=0.1.16" },
     { name = "docker", specifier = ">=7.1.0" },
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "pydantic", specifier = ">=2.13.3" },
