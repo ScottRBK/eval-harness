@@ -22,7 +22,7 @@ prefixed with `EVAL_HARNESS_`
 |`LOG_LEVEL`|string|Level for the root logger (the harness's own logging)|`DEBUG`|
 |`DOCKER_LOG_LEVEL`|string|Level for the `docker` library logger, which is noisy at `INFO`|`WARNING`|
 |`URLLIB3_LOG_LEVEL`|string|Level for the `urllib3` logger, which is noisy at `INFO`|`WARNING`|
-|`EVALS_PACKAGE`|string|Python package containing the evaluation classes; each eval is a subpackage of it, referenced by `eval_dir`|`example_evals`|
+|`EVALS_DIRS`|string|os.pathsep-separated list of directories searched, in order, for evals; each eval is `<dir>/<eval_dir>/eval.py`. Directories may live outside the repo and the first match wins (`:` on Linux/macOS, `;` on Windows)|`example_evals`|
 |`MAX_AGENT_CONCURRENCY`|int|Maximum number of processing chains run in parallel. An ungrouped agent is its own chain; each processing group is a single chain|`4`|
 |`ARRANGE_TIMEOUT_SECONDS`|int|Timeout for the arrange phase of each eval, in seconds|`3600`|
 |`ACT_TIMEOUT_SECONDS`|int|Timeout for the act phase of each eval, in seconds|`3600`|
@@ -33,14 +33,14 @@ All evaluation configuration comes from an evaluation file. See an example in [e
 An evaluation file contains two lists - `evals` and `agents`
 
 ### Evals Configuration 
-Each entry in `evals` selects one evaluation from the evals package (`EVALS_PACKAGE`, default
+Each entry in `evals` selects one evaluation from the eval roots (`EVALS_DIRS`, default
 `example_evals`) to run. Every agent in the file runs every eval. All fields are required and
 unknown keys are rejected.
 
 |Field|Type|Description|Example|
 |-----|----|-----------|-------|
 |`number`|int|Numeric identifier for the eval; shown in logs and written to the results|`2`|
-|`eval_dir`|string|Package name under the evals package (`EVALS_PACKAGE`) that implements the eval. The eval class is the PascalCase form of this name (`inflection_bug_fix` → `InflectionBugFix`)|`inflection_bug_fix`|
+|`eval_dir`|string|Directory name under one of the eval roots (`EVALS_DIRS`) that implements the eval. The eval class is the PascalCase form of this name (`inflection_bug_fix` → `InflectionBugFix`)|`inflection_bug_fix`|
 |`description`|string|Human-readable summary, shown in logs and the TUI|`bug fixes in the inflection library`|
 |`run_count`|int|Recorded against the eval in the results (`eval_run_count`). Used to determine the number of times that the evaluation is run against the agent|`1`|
 |`tags`|list[string]|Free-form labels recorded in the results (`eval_tags`). Not used for filtering or selection|`["python", "bugs"]`|

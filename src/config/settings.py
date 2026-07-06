@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     URLLIB3_LOG_LEVEL: str = "WARNING"
 
     ### Evaluation Run Configuration ###
-    EVALS_PACKAGE: str = "example_evals"
+    EVALS_DIRS: str = "example_evals"  # os.pathsep-separated eval roots, searched in order
     BASE_IMAGE: str = "eval-harness:latest"
     MAX_AGENT_CONCURRENCY: int = 4 
     HEALTH_CHECK_TIMEOUT_SECONDS: int = 3 * 60 

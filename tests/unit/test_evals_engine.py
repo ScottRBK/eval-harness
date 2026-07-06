@@ -1,10 +1,11 @@
 """Unit tests for the evals engine.
 
 Hermetic and CI-safe: ``DockerRunner`` is replaced with an in-memory recorder so
-the docker daemon is never contacted, ``_load_eval_class`` is stubbed so no real
-eval module is imported, and ``_method_to_script`` is stubbed to a deterministic
-marker so script wiring can be asserted without ``inspect.getsource``. The few
-tests that exercise the helpers directly stay pure (no docker, no real evals).
+the docker daemon is never contacted, ``_load_eval_class`` is stubbed in the
+orchestration tests so no real eval module is imported, and ``_method_to_script``
+is stubbed to a deterministic marker so script wiring can be asserted without
+``inspect.getsource``. The ``_load_eval_class`` tests themselves load real eval
+files written to pytest tmp dirs; everything else stays pure (no docker).
 
 The suite guards the orchestration contract ``main.py`` relies on: per-agent
 status transitions, score/time accumulation, and — critically — the number and
@@ -12,6 +13,7 @@ ordering of ``progress`` events the threaded drain loop consumes.
 """
 
 import logging
+import os
 import threading
 import time
 from datetime import datetime
@@ -23,6 +25,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 from agent_shell.models.agent import AgentType, HealthCheckResult
 
+from src.config.settings import settings
 from src.evals_engine import run_agent, run_session, _load_eval_class, _method_to_script
 from src.models import (
     AgentConfig,
@@ -912,59 +915,103 @@ class TestMethodToScript:
 
 
 # --------------------------------------------------------------------------- #
-# F. _load_eval_class — dir -> class-name convention (importlib stubbed)
+# F. _load_eval_class — path-based resolution across EVALS_DIRS
 # --------------------------------------------------------------------------- #
+
+_VALID_EVAL_SRC = '''
+class SaleorSpreeMapping:
+    async def arrange(self): ...
+    async def act(self): ...
+    async def score(self):
+        return {"marker": "found-me"}
+'''
+
+
+def _write_eval(root, eval_dir, source):
+    (root / eval_dir).mkdir(parents=True)
+    (root / eval_dir / "eval.py").write_text(source)
 
 
 class TestLoadEvalClass:
-    def test_derives_pascal_case_class_name_from_dir(self, monkeypatch):
-        # Arrange — capture the import target, return a module exposing the class
-        class SaleorSpreeMapping:
-            async def arrange(self): ...
-            async def act(self): ...
-            async def score(self): ...
-
-        captured = {}
-        module = SimpleNamespace(SaleorSpreeMapping=SaleorSpreeMapping)
-
-        def _fake_import(name):
-            captured["name"] = name
-            return module
-
-        monkeypatch.setattr("src.evals_engine.importlib.import_module", _fake_import)
+    def test_loads_eval_from_directory_outside_the_repo(self, tmp_path, monkeypatch):
+        # Arrange — an eval living in a directory the repo knows nothing about
+        _write_eval(tmp_path, "saleor_spree_mapping", _VALID_EVAL_SRC)
+        monkeypatch.setattr(settings, "EVALS_DIRS", str(tmp_path), raising=False)
 
         # Act
-        result = _load_eval_class("saleor_spree_mapping")
+        cls = _load_eval_class("saleor_spree_mapping")
 
         # Assert
-        assert captured["name"] == "example_evals.saleor_spree_mapping"
-        assert result is SaleorSpreeMapping
+        assert cls.__name__ == "SaleorSpreeMapping"
 
-    def test_rejects_class_missing_a_phase(self, monkeypatch):
-        # Arrange — satisfies arrange/act but not score
-        class SaleorSpreeMapping:
-            async def arrange(self): ...
-            async def act(self): ...
-
-        module = SimpleNamespace(SaleorSpreeMapping=SaleorSpreeMapping)
+    def test_earlier_dir_shadows_later_dir(self, tmp_path, monkeypatch):
+        # Arrange — same eval name in both roots, distinguishable by attribute
+        first, second = tmp_path / "first", tmp_path / "second"
+        basic_src = _VALID_EVAL_SRC.replace("SaleorSpreeMapping", "BasicShadow")
+        _write_eval(first, "basic_shadow", basic_src + "    origin = 'first'\n")
+        _write_eval(second, "basic_shadow", basic_src + "    origin = 'second'\n")
         monkeypatch.setattr(
-            "src.evals_engine.importlib.import_module", lambda name: module
+            settings,
+            "EVALS_DIRS",
+            os.pathsep.join([str(first), str(second)]),
+            raising=False,
         )
+
+        # Act
+        cls = _load_eval_class("basic_shadow")
+
+        # Assert
+        assert cls.origin == "first"
+
+    def test_missing_eval_reports_all_searched_paths(self, tmp_path, monkeypatch):
+        # Arrange — two roots, neither containing the eval
+        first, second = tmp_path / "first", tmp_path / "second"
+        first.mkdir(), second.mkdir()
+        monkeypatch.setattr(
+            settings,
+            "EVALS_DIRS",
+            os.pathsep.join([str(first), str(second)]),
+            raising=False,
+        )
+
+        # Act / Assert
+        with pytest.raises(FileNotFoundError, match="no_such_eval") as excinfo:
+            _load_eval_class("no_such_eval")
+        assert str(first) in str(excinfo.value)
+        assert str(second) in str(excinfo.value)
+
+    def test_rejects_class_missing_a_phase(self, tmp_path, monkeypatch):
+        # Arrange — arrange/act present, score missing
+        incomplete = _VALID_EVAL_SRC.replace("async def score(self):", "async def _x(self):")
+        _write_eval(tmp_path, "saleor_spree_mapping", incomplete)
+        monkeypatch.setattr(settings, "EVALS_DIRS", str(tmp_path), raising=False)
 
         # Act / Assert
         with pytest.raises(TypeError, match="must be a class implementing"):
             _load_eval_class("saleor_spree_mapping")
 
-    def test_rejects_non_class_attribute(self, monkeypatch):
-        # Arrange — the resolved attribute is not a class at all
-        module = SimpleNamespace(SaleorSpreeMapping="THE_CLASS")
-        monkeypatch.setattr(
-            "src.evals_engine.importlib.import_module", lambda name: module
+    def test_rejects_non_class_attribute(self, tmp_path, monkeypatch):
+        # Arrange — the PascalCase attribute is not a class at all
+        _write_eval(
+            tmp_path, "saleor_spree_mapping", 'SaleorSpreeMapping = "THE_CLASS"\n'
         )
+        monkeypatch.setattr(settings, "EVALS_DIRS", str(tmp_path), raising=False)
 
         # Act / Assert
         with pytest.raises(TypeError, match="must be a class implementing"):
             _load_eval_class("saleor_spree_mapping")
+
+    def test_method_extraction_works_on_path_loaded_eval(self, tmp_path, monkeypatch):
+        # Arrange — guards the inspect.getsource assumption _method_to_script relies on
+        _write_eval(tmp_path, "saleor_spree_mapping", _VALID_EVAL_SRC)
+        monkeypatch.setattr(settings, "EVALS_DIRS", str(tmp_path), raising=False)
+        cls = _load_eval_class("saleor_spree_mapping")
+
+        # Act
+        script = _method_to_script(cls.score)
+
+        # Assert
+        assert "found-me" in script
 
 
 # --------------------------------------------------------------------------- #

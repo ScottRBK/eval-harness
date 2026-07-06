@@ -79,11 +79,15 @@ provide, with one exception, given that `assert` is a keyword in python, I chang
 
 ## The Anatomy of an Eval
 Each evaluation is it's own folder containing the python logic and any test fixtures that are required
-as part of the evaluation itself.
+as part of the evaluation itself. Eval folders live under one of the roots listed in the
+`EVALS_DIRS` setting (an os.pathsep-separated list searched in order, default `example_evals`),
+so your own evals can live in a completely separate directory or repo — point
+`EVAL_HARNESS_EVALS_DIRS` at it and the first root containing a requested eval wins.
 
-Each eval must have a valid `__init__` file which exposes a module whom's class implement the protocol specified in 
-[/src/evaluation_file_protocol.py] and must contain a class name that matches the eval directory name 
+Each eval folder must contain an `eval.py` implementing the protocol specified in
+[/src/evaluation_file_protocol.py], with a class name that matches the eval directory name
 converted from snake case (`encode_repo_forgetful`) to pascal case (`EncodeRepoForgetful`).
+The harness loads `eval.py` directly by file path, so no `__init__.py` is required.
 
 For each phase (`assert`, `act` and `score`) the harness will extract the python script from the evaluation
 classes methods using the `method_to_script` function 

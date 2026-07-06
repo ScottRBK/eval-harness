@@ -45,14 +45,15 @@ be plain literals. Module-level placeholders (e.g. `REPO_URL = ""`) keep linters
 never shipped to the container.
 
 ## Generating the evaluation
-1. Check whether the environment variable `EVAL_HARNESS_EVALS_PACKAGE` is set (if not, use the
-default value in `src.config.settings.settings.EVALS_PACKAGE`).
+1. Check whether the environment variable `EVAL_HARNESS_EVALS_DIRS` is set (if not, use the
+default value in `src.config.settings.settings.EVALS_DIRS`). It is an os.pathsep-separated list
+of directories searched in order; create new evals in the **first** directory listed.
 1. Create a directory in there, in snake_case, with a suitable title for the eval
-1. Create an `eval.py` and `__init__` file inside of the newly created evaluation directory
+1. Create an `eval.py` file inside of the newly created evaluation directory (no `__init__.py`
+is needed — the harness loads `eval.py` directly by file path)
 1. Generate the class with PascalCasing of the directory you created for the evaluation.
 1. Generate the three methods (arrange, act and score) and embedded values as outlined in the
 [architecture description](../../README.md#harness-architecture) for the class.
-1. Add import the newly created class in the `__init__` file in the evals folder .
 1. Review the pattern explanations and then complete the necessary methods in the class.
 1. Agree with the user if it is okay to generate a .json file (do not overwrite the `evals.json`)
 for the evals configuration against a single agent configuration that they prefer to use for

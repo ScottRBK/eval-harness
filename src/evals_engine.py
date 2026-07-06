@@ -1,9 +1,12 @@
 import ast
 import inspect
-import importlib
+import importlib.util
 import keyword
+import os
+import sys
 import textwrap
 import logging
+from pathlib import Path
 from queue import Queue, Empty
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -199,8 +202,24 @@ def run_session(
     return [aee for aee in agent_eval_executions 
             if aee.status in (AgentEvalStatus.FAILED,AgentEvalStatus.UNHEALTHY)]
 
+def _resolve_eval_file(eval_dir: str) -> Path:
+    searched = []
+    for root in settings.EVALS_DIRS.split(os.pathsep):
+        candidate = Path(root).expanduser() / eval_dir / "eval.py"
+        if candidate.is_file():
+            return candidate
+        searched.append(str(candidate))
+    raise FileNotFoundError(f"Eval {eval_dir!r} not found. Searched: {', '.join(searched)}")
+
+
 def _load_eval_class(eval_dir: str):
-    module = importlib.import_module(f"{settings.EVALS_PACKAGE}.{eval_dir}")
+    eval_file = _resolve_eval_file(eval_dir)
+    spec = importlib.util.spec_from_file_location(f"_eval_harness_evals.{eval_dir}", eval_file)
+    module = importlib.util.module_from_spec(spec)
+    # registered so inspect/dataclasses can resolve the module by name
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+
     class_name = "".join(p.capitalize() for p in eval_dir.split("_"))
     cls = getattr(module, class_name)
     if not (isinstance(cls, type) and issubclass(cls, EvaluationFile)):
