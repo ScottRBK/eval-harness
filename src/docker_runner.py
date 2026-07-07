@@ -1,4 +1,6 @@
-import tempfile, os, shutil
+import tempfile 
+import os 
+import shutil
 import docker
 import time
 import logging 

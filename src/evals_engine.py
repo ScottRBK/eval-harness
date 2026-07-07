@@ -68,7 +68,7 @@ def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None, session_id
         health = probe.health_check(image=settings.BASE_IMAGE)
         if not health.healthy:
             aee.status = AgentEvalStatus.UNHEALTHY
-            log.error(f"Agent failed health_check")
+            log.error("Agent failed health_check")
             progress.put("update")
             return 
 

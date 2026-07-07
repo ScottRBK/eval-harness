@@ -1,13 +1,11 @@
 line-length = 100
 target-version = "py313"
 
-# Eval fixture files are intentional test subjects, not harness source.
 extend-exclude = [
     "example_evals/**/fixtures/*.py",
 ]
 
 [lint]
-# Incremental baseline: enable useful rules that the current project can pass, then tighten.
 select = [
     "E4",     # pycodestyle import-placement rules
     "E7",     # pycodestyle statement errors
@@ -23,12 +21,6 @@ select = [
     "T10",    # debugger statements
     "S",      # flake8-bandit security checks
     "RUF100", # unused noqa directives
-]
-
-# Existing cleanup targets. Remove these ignores as the codebase is tidied.
-ignore = [
-    "E401", # multiple imports on one line
-    "F541", # f-string without placeholders
 ]
 
 # Future tightening candidates, deferred to keep the first lint baseline usable:

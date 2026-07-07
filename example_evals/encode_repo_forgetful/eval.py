@@ -132,7 +132,7 @@ class EncodeRepoForgetful:
         import json
 
         if not os.path.exists("/workspace/answers.json"):
-            print(f"EVAL_SCORE=0.0") 
+            print("EVAL_SCORE=0.0") 
             return 
         
         agent_answers = {}
