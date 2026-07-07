@@ -19,6 +19,13 @@ dependencies = [
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
 
+[tool.pytest.ini_options]
+addopts = ["--strict-markers", "-m", "not integration"]
+markers = [
+    "integration: tests that exercise real Docker/container behaviour",
+]
+testpaths = ["tests"]
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
