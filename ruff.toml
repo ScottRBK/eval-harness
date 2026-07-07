@@ -1,0 +1,66 @@
+line-length = 100
+target-version = "py313"
+
+# Eval fixture files are intentional test subjects, not harness source.
+extend-exclude = [
+    "example_evals/**/fixtures/*.py",
+]
+
+[lint]
+# Incremental baseline: enable useful rules that the current project can pass, then tighten.
+select = [
+    "E4",     # pycodestyle import-placement rules
+    "E7",     # pycodestyle statement errors
+    "E9",     # pycodestyle runtime/syntax errors
+    "F",      # Pyflakes: undefined names, unused imports
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "PIE",    # flake8-pie
+    "PGH",    # pygrep-hooks
+    "YTT",    # flake8-2020
+    "FA",     # flake8-future-annotations
+    "LOG",    # logging module misuse
+    "T10",    # debugger statements
+    "S",      # flake8-bandit security checks
+    "RUF100", # unused noqa directives
+]
+
+# Existing cleanup targets. Remove these ignores as the codebase is tidied.
+ignore = [
+    "E401", # multiple imports on one line
+    "F541", # f-string without placeholders
+]
+
+# Future tightening candidates, deferred to keep the first lint baseline usable:
+# "I"   # import sorting
+# "W"   # whitespace warnings
+# "UP"  # pyupgrade
+# "Q"   # quote consistency
+# "COM" # trailing commas
+
+[lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/**/*" = [
+    "B008", # test helpers may use stable call-result defaults
+    "S101", # assert is expected in tests
+    "S105", # fake hardcoded secrets/tokens
+    "S106", # fake hardcoded password/token args
+    "S108", # hardcoded temp paths in tests
+    "S311", # pseudo-random usage in tests
+]
+"example_evals/**/*" = [
+    "S101", # eval scoring may use assertions
+    "S105", # prompts/fixtures may contain fake token-like strings
+    "S106", # prompts/fixtures may contain fake password-like args
+    "S108", # evals intentionally use fixed in-container temp paths
+    "S110", # some eval probes intentionally ignore optional failures
+    "S314", # evals parse their own in-container JUnit XML reports
+    "S603", # eval scorers intentionally run subprocesses
+    "S607", # eval scorers intentionally invoke local tools by name
+]
+"src/docker_runner.py" = [
+    "S105", # EVAL_TOTAL_TOKENS is an output marker, not a secret
+]
+"src/evals_engine.py" = [
+    "S105", # embedded token-tracker script is not a secret
+]
