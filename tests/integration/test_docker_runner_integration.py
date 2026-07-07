@@ -7,7 +7,6 @@ arrange/act/score lifecycle, stdout parsing, and container cleanup.
 
 import logging
 
-import docker
 import pytest
 from agent_shell.models.agent import AgentType
 
@@ -17,44 +16,25 @@ pytestmark = pytest.mark.integration
 
 
 IMAGE = "eval-harness:latest"
-CONTAINER_NAME = "eval_harness_claude_code_integration-model"
+BUILD_COMMAND = "docker build -t eval-harness:latest -f src/docker/Dockerfile src/docker/"
 
 
-def _docker_client_or_fail():
-    """Return a Docker client or fail with the setup action the caller needs."""
-    try:
-        client = docker.from_env()
-        client.ping()
-    except docker.errors.DockerException as exc:
-        pytest.fail(f"Docker daemon is required for integration tests: {exc}")
-    return client
-
-
-def _require_image(client):
-    """Fail clearly if the eval-harness image has not been built yet."""
-    try:
-        client.images.get(IMAGE)
-    except docker.errors.ImageNotFound:
-        pytest.fail(
-            f"Docker image {IMAGE!r} is required. Build it with: "
-            "docker build -t eval-harness:latest -f src/docker/Dockerfile src/docker/"
-        )
-
-
-def test_runs_arrange_act_score_inside_real_container(monkeypatch):
-    # Arrange
-    client = _docker_client_or_fail()
-    _require_image(client)
-    monkeypatch.setattr(
-        "src.docker_runner.settings.CLAUDE_CODE_OAUTH_TOKEN",
-        "integration-test-token",
-    )
-
-    runner = DockerRunner(
+def _runner(model: str) -> DockerRunner:
+    return DockerRunner(
         agent_type=AgentType.CLAUDE_CODE,
-        agent_model="integration-model",
+        agent_model=model,
         logger=logging.getLogger("integration.docker_runner"),
     )
+
+
+def test_runs_arrange_act_score_inside_real_container(
+    require_docker_image,
+    fake_claude_token,
+    assert_container_removed,
+):
+    # Arrange
+    require_docker_image(IMAGE, BUILD_COMMAND)
+    runner = _runner("integration-model")
     arrange_script = r"""
 from pathlib import Path
 Path('/workspace/integration-marker.txt').write_text('arrange\n')
@@ -86,5 +66,49 @@ print('EVAL_SCORE=0.875')
     assert result.score == pytest.approx(0.875)
     assert result.total_tokens == 7
     assert result.time_taken_seconds > 0
-    with pytest.raises(docker.errors.NotFound):
-        client.containers.get(CONTAINER_NAME)
+    assert_container_removed("eval_harness_claude_code_integration-model")
+
+
+def test_timeout_removes_real_container(
+    monkeypatch,
+    require_docker_image,
+    fake_claude_token,
+    assert_container_removed,
+):
+    # Arrange
+    require_docker_image(IMAGE, BUILD_COMMAND)
+    monkeypatch.setattr(
+        "src.docker_runner.settings.ARRANGE_TIMEOUT_SECONDS",
+        1,
+    )
+    runner = _runner("integration-timeout")
+
+    # Act / Assert
+    with pytest.raises(TimeoutError, match="arrange timed out"):
+        runner.docker_run(
+            arrange_script="import time\ntime.sleep(5)",
+            act_script="print('should not run')",
+            score_script="print('EVAL_SCORE=1')",
+            image=IMAGE,
+        )
+    assert_container_removed("eval_harness_claude_code_integration-timeout")
+
+
+def test_failed_phase_removes_real_container(
+    require_docker_image,
+    fake_claude_token,
+    assert_container_removed,
+):
+    # Arrange
+    require_docker_image(IMAGE, BUILD_COMMAND)
+    runner = _runner("integration-failure")
+
+    # Act / Assert
+    with pytest.raises(RuntimeError, match="act failed"):
+        runner.docker_run(
+            arrange_script="print('arranged')",
+            act_script="raise RuntimeError('boom')",
+            score_script="print('EVAL_SCORE=1')",
+            image=IMAGE,
+        )
+    assert_container_removed("eval_harness_claude_code_integration-failure")
