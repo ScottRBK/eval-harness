@@ -65,6 +65,12 @@ def github_token(monkeypatch):
 
 
 @pytest.fixture
+def azure_devops_pat(monkeypatch):
+    monkeypatch.setattr("src.docker_runner.settings.AZURE_DEVOPS_PAT", "tok-ado")
+    return "tok-ado"
+
+
+@pytest.fixture
 def health_timeout(monkeypatch):
     monkeypatch.setattr("src.docker_runner.settings.HEALTH_CHECK_TIMEOUT_SECONDS", 60)
     return 60
@@ -582,6 +588,37 @@ class TestDockerRun:
         # Assert
         env = client.containers.run.call_args.kwargs["environment"]
         assert "GH_TOKEN" not in env
+
+    def test_injects_azure_devops_pat_as_ado_pat_env_when_set(
+        self, claude_token, azure_devops_pat, make_docker_client
+    ):
+        # Arrange — mirrors GITHUB_TOKEN/GH_TOKEN for private Azure DevOps clones.
+        client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            runner.docker_run("a", "b", "c", "img")
+
+        # Assert
+        env = client.containers.run.call_args.kwargs["environment"]
+        assert env["ADO_PAT"] == azure_devops_pat
+
+    def test_omits_ado_pat_env_when_azure_devops_pat_unset(
+        self, claude_token, make_docker_client, monkeypatch
+    ):
+        # Arrange — blank tokens are omitted, matching GH_TOKEN behaviour.
+        monkeypatch.setattr("src.docker_runner.settings.AZURE_DEVOPS_PAT", "")
+        client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            runner.docker_run("a", "b", "c", "img")
+
+        # Assert
+        env = client.containers.run.call_args.kwargs["environment"]
+        assert "ADO_PAT" not in env
 
 
 # --------------------------------------------------------------------------- #

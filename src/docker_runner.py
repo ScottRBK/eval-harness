@@ -276,6 +276,7 @@ class DockerRunner:
                     "AGENT_MODEL": self._agent_model,
                     "AGENT_EFFORT": self._agent_effort or "",
                     **({"GH_TOKEN": settings.GITHUB_TOKEN} if settings.GITHUB_TOKEN else {}),
+                    **({"ADO_PAT": settings.AZURE_DEVOPS_PAT} if settings.AZURE_DEVOPS_PAT else {}),
                     **prov.environment,
                 },
                 detach=True,
