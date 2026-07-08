@@ -61,8 +61,8 @@ class DockerRunner:
         never touched. The temp dir is tracked so the run can delete it after.
         """
         staging = Path(tempfile.mkdtemp(prefix="eval-mount-"))
-        # allows the container node to read and mutate staged files
-        os.chmod(staging, 0o777)
+        # Allow the container node user to traverse the throwaway host bind mount.
+        os.chmod(staging, 0o777)  # noqa: S103 - required for cross-UID Docker binds
         for source in files:
             shutil.copy2(source, staging / source.name)
             os.chmod(staging / source.name, 0o644)
