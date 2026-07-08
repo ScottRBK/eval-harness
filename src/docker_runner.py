@@ -61,6 +61,8 @@ class DockerRunner:
         never touched. The temp dir is tracked so the run can delete it after.
         """
         staging = Path(tempfile.mkdtemp(prefix="eval-mount-"))
+        # allows the container node to read and mutate staged files
+        os.chmod(staging, 0o777)
         for source in files:
             shutil.copy2(source, staging / source.name)
             os.chmod(staging / source.name, 0o644)
@@ -69,10 +71,6 @@ class DockerRunner:
         return {str(staging): {"bind": container_dir, "mode": "rw"}}
 
     def _setup_codex(self) -> AgentProvisioning:
-        # Codex authenticates from ~/.codex/auth.json (the ChatGPT login). We stage-mount a
-        # throwaway copy so Codex can refresh the token in place during the run without
-        # touching the host file; the copy is discarded afterwards. The host keeps its own
-        # copy fresh through normal codex use, so each run starts from a current token.
         auth = Path(settings.CODEX_CREDENTIALS_LOC).expanduser()
         if not auth.exists():
             raise RuntimeError(
