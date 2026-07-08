@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-and-unit:
+    name: Static checks and unit tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@f98e06938123ccabd21905ea5d0069192241f9f1 # v8.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            .python-version
+
+      - name: Install Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run Ruff lint checks
+        run: uv run ruff check --output-format=github .
+
+      - name: Run Ruff format check
+        run: uv run ruff format --check .
+
+      - name: Run unit tests
+        run: uv run pytest tests/unit
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    needs: static-and-unit
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@f98e06938123ccabd21905ea5d0069192241f9f1 # v8.3.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+            .python-version
+
+      - name: Install Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Build base Docker image
+        run: docker build -t eval-harness:latest -f src/docker/Dockerfile src/docker/
+
+      - name: Build Rust Docker image
+        run: docker build -t eval-harness-rust:latest -f src/docker/rust/Dockerfile src/docker/
+
+      - name: Run integration tests
+        run: uv run pytest -o addopts="--strict-markers" tests/integration -m integration
