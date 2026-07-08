@@ -19,9 +19,7 @@ def require_docker_image(docker_client):
         try:
             docker_client.images.get(image)
         except docker.errors.ImageNotFound:
-            pytest.fail(
-                f"Docker image {image!r} is required. Build it with: {build_command}"
-            )
+            pytest.fail(f"Docker image {image!r} is required. Build it with: {build_command}")
 
     return _require
 

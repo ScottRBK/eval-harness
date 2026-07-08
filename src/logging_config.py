@@ -15,9 +15,7 @@ from datetime import datetime
 from src.config.settings import settings
 from src.helpers.naming import safe_name
 
-_FMT = logging.Formatter(
-    "%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
-)
+_FMT = logging.Formatter("%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s")
 
 
 def agent_label(cfg) -> str:

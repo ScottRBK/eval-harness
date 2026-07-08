@@ -1,9 +1,9 @@
-import tempfile 
-import os 
+import tempfile
+import os
 import shutil
 import docker
 import time
-import logging 
+import logging
 from pathlib import Path
 from agent_shell.models.agent import AgentType, HealthCheckResult
 
@@ -35,7 +35,6 @@ def _parse_total_tokens(buffer: str, log: logging.Logger) -> int:
 
 
 class DockerRunner:
-
     def __init__(
         self,
         agent_type: AgentType,
@@ -46,16 +45,14 @@ class DockerRunner:
     ):
         self._agent_type = agent_type
         self._agent_model = agent_model
-        self._agent_effort = agent_effort 
+        self._agent_effort = agent_effort
         # Per-agent logger when the engine injects one; module logger otherwise.
         self._log = logger or logging.getLogger(__name__)
         # Throwaway dirs we create for credentials; deleted after the run.
         self._temp_dirs: list[Path] = []
         self._session_id = session_id
 
-    def _staged_mount(
-        self, files: list[Path], container_dir: str
-    ) -> dict[str, dict[str, str]]:
+    def _staged_mount(self, files: list[Path], container_dir: str) -> dict[str, dict[str, str]]:
         """Copy files into a throwaway dir and bind that dir read-write.
 
         The agent - and agent_shell, which rewrites opencode.json to inject MCP
@@ -85,14 +82,21 @@ class DockerRunner:
 
     def _setup_copilot(self) -> AgentProvisioning:
         if not settings.COPILOT_GITHUB_TOKEN:
-            raise RuntimeError("COPILOT_GITHUB_TOKEN not configured (set EVAL_HARNESS_COPILOT_GITHUB_TOKEN")
-        return AgentProvisioning(environment={"COPILOT_GITHUB_TOKEN": settings.COPILOT_GITHUB_TOKEN})
-
+            raise RuntimeError(
+                "COPILOT_GITHUB_TOKEN not configured (set EVAL_HARNESS_COPILOT_GITHUB_TOKEN"
+            )
+        return AgentProvisioning(
+            environment={"COPILOT_GITHUB_TOKEN": settings.COPILOT_GITHUB_TOKEN}
+        )
 
     def _setup_claude_code(self) -> AgentProvisioning:
         if not settings.CLAUDE_CODE_OAUTH_TOKEN:
-            raise RuntimeError("CLAUDE_CODE_OAUTH_TOKEN not configured (run `claude setup-token` and set env var)")
-        return AgentProvisioning(environment={"CLAUDE_CODE_OAUTH_TOKEN": settings.CLAUDE_CODE_OAUTH_TOKEN})
+            raise RuntimeError(
+                "CLAUDE_CODE_OAUTH_TOKEN not configured (run `claude setup-token` and set env var)"
+            )
+        return AgentProvisioning(
+            environment={"CLAUDE_CODE_OAUTH_TOKEN": settings.CLAUDE_CODE_OAUTH_TOKEN}
+        )
 
     def _setup_opencode(self) -> AgentProvisioning:
         creds_file = Path(settings.OPENCODE_CREDENTIALS_LOC).expanduser()
@@ -107,15 +111,14 @@ class DockerRunner:
         )
         return AgentProvisioning(volumes=credentials | config)
 
-
     def _provision_agent(self) -> AgentProvisioning:
         match self._agent_type:
             case AgentType.CLAUDE_CODE:
-                return self._setup_claude_code() 
+                return self._setup_claude_code()
             case AgentType.OPENCODE:
-                return self._setup_opencode() 
+                return self._setup_opencode()
             case AgentType.CODEX:
-                return self._setup_codex() 
+                return self._setup_codex()
             case AgentType.COPILOT_CLI:
                 return self._setup_copilot()
             case _:
@@ -159,7 +162,7 @@ class DockerRunner:
         )
 
         client = docker.from_env()
-        prov = self._provision_agent()            # raises on missing creds -> FAILED
+        prov = self._provision_agent()  # raises on missing creds -> FAILED
         effort_suffix = f"_{self._agent_effort}" if self._agent_effort else ""
         container_name = safe_name(
             f"eval_harness_health_{self._agent_type.value}_{self._agent_model}{effort_suffix}"
@@ -174,7 +177,8 @@ class DockerRunner:
             labels[_SESSION_LABEL] = str(self._session_id)
 
         container = client.containers.run(
-            image=image, command=["sleep", "infinity"],
+            image=image,
+            command=["sleep", "infinity"],
             volumes=prov.volumes,
             environment={
                 "AGENT_TYPE": self._agent_type.value,
@@ -183,17 +187,28 @@ class DockerRunner:
                 "HEALTH_CHECK_TIMEOUT_SECONDS": str(settings.HEALTH_CHECK_TIMEOUT_SECONDS),
                 **prov.environment,
             },
-            detach=True, name=container_name, labels=labels,
+            detach=True,
+            name=container_name,
+            labels=labels,
         )
 
         try:
             timeout_seconds = settings.HEALTH_CHECK_TIMEOUT_SECONDS
             # `timeout` enforces the wall clock in-container; exec_run blocks
             # until the exec finishes so no client-side streaming loop needed.
-            cmd = ["timeout", "--kill-after=10s", str(timeout_seconds),
-                   "python", "-u", "-c", script]
+            cmd = [
+                "timeout",
+                "--kill-after=10s",
+                str(timeout_seconds),
+                "python",
+                "-u",
+                "-c",
+                script,
+            ]
             exit_code, output = container.exec_run(cmd)
-            buffer = output.decode(errors="replace") if isinstance(output, bytes) else (output or "")
+            buffer = (
+                output.decode(errors="replace") if isinstance(output, bytes) else (output or "")
+            )
         finally:
             try:
                 container.stop(timeout=5)
@@ -224,12 +239,13 @@ class DockerRunner:
             exception=exception or "health check produced no HEALTHY= marker",
         )
 
-    def docker_run(self,
-            arrange_script: str,
-            act_script: str,
-            score_script: str,
-            image: str,
-   ) -> DockerRunResult:
+    def docker_run(
+        self,
+        arrange_script: str,
+        act_script: str,
+        score_script: str,
+        image: str,
+    ) -> DockerRunResult:
 
         client = docker.from_env()
         prov = self._provision_agent()
@@ -282,7 +298,15 @@ class DockerRunner:
             ]:
                 timeout_seconds = phase_timeouts[label]
                 # future_me: -u to ensure stdout/stderr unbffered
-                cmd = ["timeout", "--kill-after=30s", str(timeout_seconds), "python", "-u","-c", script] 
+                cmd = [
+                    "timeout",
+                    "--kill-after=30s",
+                    str(timeout_seconds),
+                    "python",
+                    "-u",
+                    "-c",
+                    script,
+                ]
                 exec_id = client.api.exec_create(container.id, cmd)["Id"]
                 self._log.info(f"--- {label} phase ---")
                 self._log.info("container started")
@@ -307,10 +331,9 @@ class DockerRunner:
 
                 exit_code = client.api.exec_inspect(exec_id)["ExitCode"]
 
-                if exit_code in (124, 137) :
+                if exit_code in (124, 137):
                     self._log.error(f"{label} timed out after {timeout_seconds}s")
                     raise TimeoutError(f"{label} timed out after {timeout_seconds}s")
-
 
                 if exit_code != 0:
                     self._log.error(
@@ -329,8 +352,8 @@ class DockerRunner:
                             try:
                                 score = float(raw)
                             except ValueError as e:
-                                raise RuntimeError(f"Malformed score line {line!r}: "
-                                    "expected EVAL_SCORE=<float>"
+                                raise RuntimeError(
+                                    f"Malformed score line {line!r}: expected EVAL_SCORE=<float>"
                                 ) from e
                             self._log.info(f"Eval Score {score}")
                             break

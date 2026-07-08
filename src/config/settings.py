@@ -1,12 +1,9 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-class Settings(BaseSettings):
 
-    model_config = SettingsConfigDict(
-        env_prefix="EVAL_HARNESS_",
-        env_file=".env",
-        extra="ignore")
-    
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="EVAL_HARNESS_", env_file=".env", extra="ignore")
+
     CLAUDE_CODE_OAUTH_TOKEN: str = ""
     OPENCODE_CREDENTIALS_LOC: str = "~/.local/share/opencode/auth.json"
     CODEX_CREDENTIALS_LOC: str = "~/.codex/auth.json"
@@ -23,11 +20,11 @@ class Settings(BaseSettings):
     ### Evaluation Run Configuration ###
     EVALS_DIRS: str = "example_evals"  # os.pathsep-separated eval roots, searched in order
     BASE_IMAGE: str = "eval-harness:latest"
-    MAX_AGENT_CONCURRENCY: int = 4 
-    HEALTH_CHECK_TIMEOUT_SECONDS: int = 3 * 60 
-    ARRANGE_TIMEOUT_SECONDS: int = 60 * 60 
-    ACT_TIMEOUT_SECONDS: int = 60 * 60 
-    SCORE_TIMEOUT_SECONDS: int = 10 * 60 
+    MAX_AGENT_CONCURRENCY: int = 4
+    HEALTH_CHECK_TIMEOUT_SECONDS: int = 3 * 60
+    ARRANGE_TIMEOUT_SECONDS: int = 60 * 60
+    ACT_TIMEOUT_SECONDS: int = 60 * 60
+    SCORE_TIMEOUT_SECONDS: int = 10 * 60
 
 
 settings = Settings()

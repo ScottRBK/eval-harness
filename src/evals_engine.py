@@ -16,7 +16,7 @@ from uuid import UUID
 from src.models import AgentEvalExecution, AgentEvalStatus
 from src.docker_runner import DockerRunner
 from src.logging_config import agent_logger
-from src.config.settings import settings 
+from src.config.settings import settings
 from src.evaluation_file_protocol import EvaluationFile
 
 
@@ -45,7 +45,9 @@ if _EvalHarnessAgentShell is not None:
 """
 
 
-def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None, session_id: UUID | None = None):
+def run_agent(
+    aee: AgentEvalExecution, progress: Queue, run_dir=None, session_id: UUID | None = None
+):
 
     log = logger  # fallback so the except block always has a valid logger
 
@@ -70,7 +72,7 @@ def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None, session_id
             aee.status = AgentEvalStatus.UNHEALTHY
             log.error("Agent failed health_check")
             progress.put("update")
-            return 
+            return
 
         for eval_exec in aee.evals_executions:
             log.info(f"Loading Evalaution {eval_exec.eval.number} - {eval_exec.eval.description}")
@@ -101,7 +103,7 @@ def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None, session_id
                 logger=log,
                 session_id=session_id,
             )
-            
+
             run_count = max(eval_exec.eval.run_count, 1)
             run_scores: list[float] = []
             total_tokens = 0
@@ -143,18 +145,19 @@ def run_agent(aee: AgentEvalExecution, progress: Queue, run_dir=None, session_id
     aee.status = AgentEvalStatus.COMPLETED
     progress.put("update")
 
+
 def _build_processing_chains(aees: list[AgentEvalExecution]) -> list[list[AgentEvalExecution]]:
 
     chains = []
-    groups = {} 
+    groups = {}
 
     for aee in aees:
         group = aee.agent_config.processing_group
-        if group is None: 
+        if group is None:
             chains.append([aee])
         elif group in groups:
             chains[groups[group]].append(aee)
-        else: 
+        else:
             groups[group] = len(chains)
             chains.append([aee])
 
@@ -168,8 +171,7 @@ def run_session(
     run_dir=None,
     session_id: UUID | None = None,
 ) -> list[AgentEvalExecution]:
-    """Run every agent/processing group in parallel, one worker thread per agent.
-    """
+    """Run every agent/processing group in parallel, one worker thread per agent."""
     progress: Queue = Queue()
     chains = _build_processing_chains(aees=agent_eval_executions)
 
@@ -182,7 +184,7 @@ def run_session(
                     f"Agent {aee.agent_config.agent_type}-{aee.agent_config.agent_model} "
                     f"failed: {e!r}"
                 )
-                   #this is fine because in run agent we are making it as FAILED so can swallow it
+                # this is fine because in run agent we are making it as FAILED so can swallow it
                 continue
             if aee.status == AgentEvalStatus.UNHEALTHY:
                 logger.error(
@@ -191,7 +193,7 @@ def run_session(
                 )
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = [pool.submit(_run_chain, chain) for chain in chains] 
+        futures = [pool.submit(_run_chain, chain) for chain in chains]
         while not all(f.done() for f in futures) or not progress.empty():
             try:
                 progress.get(timeout=0.1)
@@ -199,8 +201,12 @@ def run_session(
                 continue
             on_update()
 
-    return [aee for aee in agent_eval_executions 
-            if aee.status in (AgentEvalStatus.FAILED,AgentEvalStatus.UNHEALTHY)]
+    return [
+        aee
+        for aee in agent_eval_executions
+        if aee.status in (AgentEvalStatus.FAILED, AgentEvalStatus.UNHEALTHY)
+    ]
+
 
 def _resolve_eval_file(eval_dir: str) -> Path:
     searched = []
@@ -226,7 +232,9 @@ def _load_eval_class(eval_dir: str):
         raise TypeError(f"{class_name} must be a class implementing arrange/act/score")
     return cls
 
+
 _FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef)
+
 
 def _extract_method_body(method) -> str:
     src = textwrap.dedent(inspect.getsource(method))
@@ -262,7 +270,7 @@ def _extract_method_body(method) -> str:
                 break
             start -= 1
 
-        body = "\n".join(lines[start:fn.body[-1].end_lineno])
+        body = "\n".join(lines[start : fn.body[-1].end_lineno])
 
     return textwrap.dedent(body).rstrip() + "\n"
 

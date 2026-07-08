@@ -22,7 +22,7 @@ IMAGE = "eval-harness:latest"
 BUILD_COMMAND = "docker build -t eval-harness:latest -f src/docker/Dockerfile src/docker/"
 
 
-EVAL_SOURCE = r'''
+EVAL_SOURCE = r"""
 class IntegrationEval:
     image = "eval-harness:latest"
     score_embedded_values = {
@@ -46,7 +46,7 @@ class IntegrationEval:
         assert contents == EXPECTED_CONTENTS
         print("EVAL_TOTAL_TOKENS=13")
         print("EVAL_SCORE=0.625")
-'''
+"""
 
 
 def test_run_agent_extracts_eval_methods_and_runs_them_in_real_container(

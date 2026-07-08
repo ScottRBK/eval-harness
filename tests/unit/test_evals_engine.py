@@ -66,9 +66,7 @@ def _make_aee(
         total_score=0,
         total_tokens=0,
         total_time_taken_seconds=0,
-        evals_executions=[
-            EvalExecution(id=uuid4(), eval=e, agent_config=agent) for e in evals
-        ],
+        evals_executions=[EvalExecution(id=uuid4(), eval=e, agent_config=agent) for e in evals],
         status=AgentEvalStatus.PENDING,
     )
 
@@ -355,9 +353,7 @@ class TestRunAgent:
         # Assert
         assert len(recorder.calls) == 3
 
-    def test_builds_a_runner_per_eval_with_agent_identity(
-        self, fake_runner, fake_eval_loading
-    ):
+    def test_builds_a_runner_per_eval_with_agent_identity(self, fake_runner, fake_eval_loading):
         # Arrange
         fake_eval_loading()
         recorder = fake_runner([(1.0, 1.0), (1.0, 1.0)])
@@ -538,9 +534,7 @@ class TestRunAgentFailure:
         # Assert
         assert aee.status == AgentEvalStatus.FAILED
 
-    def test_failure_emits_final_update_for_the_display(
-        self, fake_runner, fake_eval_loading
-    ):
+    def test_failure_emits_final_update_for_the_display(self, fake_runner, fake_eval_loading):
         # Arrange — the TUI must learn about the failure: one update on entry,
         # then one when the agent flips to FAILED.
         fake_eval_loading()
@@ -608,9 +602,7 @@ class TestRunAgentHealthCheck:
         assert recorder.health_calls == ["eval-harness:latest"]
         assert recorder.calls == []
 
-    def test_probe_raising_marks_failed_and_propagates(
-        self, fake_runner, fake_eval_loading
-    ):
+    def test_probe_raising_marks_failed_and_propagates(self, fake_runner, fake_eval_loading):
         # Arrange — a real infra failure (missing image, exec crash) raises out
         # of the probe rather than returning an unhealthy verdict; run_agent must
         # mark FAILED and re-raise so run_session can collect the failure.
@@ -632,9 +624,7 @@ class TestRunAgentHealthCheck:
 
 
 class TestRunAgentConcurrency:
-    def test_concurrent_agents_keep_independent_state(
-        self, fake_runner, fake_eval_loading
-    ):
+    def test_concurrent_agents_keep_independent_state(self, fake_runner, fake_eval_loading):
         # Arrange — two agents, two evals each, run on a real pool sharing one queue
         fake_eval_loading()
         fake_runner([(1.0, 1.0)] * 4)
@@ -656,9 +646,7 @@ class TestRunAgentConcurrency:
         # 2 agents * (2 evals + 2 bookends) updates land on the shared queue
         assert _drain(progress).count("update") == 8
 
-    def test_one_failing_agent_does_not_sink_the_other(
-        self, fake_runner, fake_eval_loading
-    ):
+    def test_one_failing_agent_does_not_sink_the_other(self, fake_runner, fake_eval_loading):
         # Arrange — agent A's eval raises; agent B must still complete
         fake_eval_loading()
         # results are pulled in call order across both threads; all the same shape
@@ -669,9 +657,7 @@ class TestRunAgentConcurrency:
 
         # Act
         with ThreadPoolExecutor(max_workers=2) as pool:
-            futures = {
-                pool.submit(run_agent, a, Queue()): a for a in (aee_a, aee_b)
-            }
+            futures = {pool.submit(run_agent, a, Queue()): a for a in (aee_a, aee_b)}
             statuses = []
             errors = 0
             for f in futures:
@@ -692,9 +678,7 @@ class TestRunAgentConcurrency:
 
 
 class TestRunSession:
-    def test_returns_no_failures_when_all_agents_succeed(
-        self, fake_runner, fake_eval_loading
-    ):
+    def test_returns_no_failures_when_all_agents_succeed(self, fake_runner, fake_eval_loading):
         # Arrange
         fake_eval_loading()
         fake_runner([(1.0, 1.0), (1.0, 1.0)])
@@ -722,9 +706,7 @@ class TestRunSession:
         completed = [a for a in agents if a.status == AgentEvalStatus.COMPLETED]
         assert len(completed) == 1
 
-    def test_collects_every_failure_not_just_the_first(
-        self, fake_runner, fake_eval_loading
-    ):
+    def test_collects_every_failure_not_just_the_first(self, fake_runner, fake_eval_loading):
         # Arrange — both agents fail; the old `f.result()` lost all but the first
         fake_eval_loading()
         fake_runner([RuntimeError("boom-1"), RuntimeError("boom-2")])
@@ -737,9 +719,7 @@ class TestRunSession:
         assert len(failed) == 2
         assert all(a.status == AgentEvalStatus.FAILED for a in failed)
 
-    def test_invokes_on_update_for_each_progress_event(
-        self, fake_runner, fake_eval_loading
-    ):
+    def test_invokes_on_update_for_each_progress_event(self, fake_runner, fake_eval_loading):
         # Arrange — one agent, two evals: N + 2 = 4 progress events
         fake_eval_loading()
         fake_runner([(1.0, 1.0), (1.0, 1.0)])
@@ -769,9 +749,7 @@ class TestRunSessionHealthSplit:
     ``run_session``'s return filter does with the statuses the chain sets.
     """
 
-    def test_unhealthy_and_failed_agents_both_surface_with_distinct_statuses(
-        self, monkeypatch
-    ):
+    def test_unhealthy_and_failed_agents_both_surface_with_distinct_statuses(self, monkeypatch):
         # Arrange — three agents: one completes, one comes back UNHEALTHY, one
         # comes back FAILED. Mirror run_agent's real contract: failed raises
         # (so _run_chain logs and swallows it), unhealthy returns cleanly with
@@ -794,9 +772,7 @@ class TestRunSessionHealthSplit:
         failed = _make_aee(["e_f"], agent_model="fail-model")
 
         # Act
-        returned = run_session(
-            [healthy, unhealthy, failed], on_update=lambda: None, max_workers=3
-        )
+        returned = run_session([healthy, unhealthy, failed], on_update=lambda: None, max_workers=3)
 
         # Assert — the failed and unhealthy agents are both returned, each with
         # its own status; the healthy agent is excluded.
@@ -834,7 +810,8 @@ def _multi_line_signature_method(
     return answer
 
 
-def _one_line_sample_method(self): return 42
+def _one_line_sample_method(self):
+    return 42
 
 
 def _leading_comment_sample_method(self):
@@ -918,13 +895,13 @@ class TestMethodToScript:
 # F. _load_eval_class — path-based resolution across EVALS_DIRS
 # --------------------------------------------------------------------------- #
 
-_VALID_EVAL_SRC = '''
+_VALID_EVAL_SRC = """
 class SaleorSpreeMapping:
     async def arrange(self): ...
     async def act(self): ...
     async def score(self):
         return {"marker": "found-me"}
-'''
+"""
 
 
 def _write_eval(root, eval_dir, source):
@@ -992,9 +969,7 @@ class TestLoadEvalClass:
 
     def test_rejects_non_class_attribute(self, tmp_path, monkeypatch):
         # Arrange — the PascalCase attribute is not a class at all
-        _write_eval(
-            tmp_path, "saleor_spree_mapping", 'SaleorSpreeMapping = "THE_CLASS"\n'
-        )
+        _write_eval(tmp_path, "saleor_spree_mapping", 'SaleorSpreeMapping = "THE_CLASS"\n')
         monkeypatch.setattr(settings, "EVALS_DIRS", str(tmp_path), raising=False)
 
         # Act / Assert
@@ -1020,9 +995,7 @@ class TestLoadEvalClass:
 
 
 class TestProcessingGroups:
-    def test_agents_in_the_same_group_never_run_concurrently(
-        self, recording_run_agent
-    ):
+    def test_agents_in_the_same_group_never_run_concurrently(self, recording_run_agent):
         # Arrange — two agents pinned to one shared backend ("bosman-server").
         # max_workers is generous so only the grouping, not the pool size, can
         # keep them apart.
@@ -1086,9 +1059,7 @@ class TestProcessingGroups:
         # Assert
         assert [model for _, model in recorder.entries] == ["first", "second", "third"]
 
-    def test_failure_in_a_group_is_isolated_and_still_reported(
-        self, recording_run_agent
-    ):
+    def test_failure_in_a_group_is_isolated_and_still_reported(self, recording_run_agent):
         # Arrange — the first agent in a group fails; the rest of the group must
         # still run, and the failure must still surface in the returned list.
         recorder = recording_run_agent(fail_models={"b1"})

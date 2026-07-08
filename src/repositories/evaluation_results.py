@@ -57,23 +57,24 @@ def _parse_non_serialisable(obj: Any) -> Any:
 
 
 class EvaluationResultsRepository(Protocol):
-    def export (self, aees: list[AgentEvalExecution]) -> None:
-        ...
+    def export(self, aees: list[AgentEvalExecution]) -> None: ...
 
-class EvaluationResultsService():
+
+class EvaluationResultsService:
     def __init__(self, results_repo: EvaluationResultsRepository):
         self._results_repo = results_repo
 
     def export(self, aees: list[AgentEvalExecution]) -> None:
-        self._results_repo.export(aees=aees) 
+        self._results_repo.export(aees=aees)
 
-class JsonEvaluationResultsRepository():
+
+class JsonEvaluationResultsRepository:
     def __init__(self, run_dir: Path):
         self._results_file = run_dir / settings.RESULTS_FILENAME
 
     def export(self, aees: list[AgentEvalExecution]) -> None:
         res = json.dumps([asdict(aee) for aee in aees], default=_parse_non_serialisable, indent=2)
-        
+
         logger.debug(f"exporting results file to {self._results_file}")
         try:
             self._results_file.parent.mkdir(parents=True, exist_ok=True)
@@ -83,8 +84,9 @@ class JsonEvaluationResultsRepository():
             logger.error(f"error writing results json file: {e}")
             return
         logger.debug("results file exported")
-        
-class CsvEvaluationResultsRepository():
+
+
+class CsvEvaluationResultsRepository:
     def __init__(self, run_dir: Path):
         self._results_file = run_dir / settings.CSV_RESULTS_FILENAME
 
@@ -121,15 +123,11 @@ class CsvEvaluationResultsRepository():
                                 "eval_run_count": _serialize_cell(eval_execution.eval.run_count),
                                 "eval_tags": json.dumps(eval_execution.eval.tags),
                                 "eval_score": _serialize_cell(eval_execution.score),
-                                "eval_total_tokens": _serialize_cell(
-                                    eval_execution.total_tokens
-                                ),
+                                "eval_total_tokens": _serialize_cell(eval_execution.total_tokens),
                                 "eval_time_taken_seconds": _serialize_cell(
                                     eval_execution.time_taken_seconds
                                 ),
-                                "eval_date_executed": _serialize_cell(
-                                    eval_execution.date_executed
-                                ),
+                                "eval_date_executed": _serialize_cell(eval_execution.date_executed),
                             }
                         )
         except Exception as e:
@@ -140,7 +138,7 @@ class CsvEvaluationResultsRepository():
 
 if __name__ == "__main__":
     from uuid import uuid4
-    from src.models import AgentConfig, Eval, EvalExecution 
+    from src.models import AgentConfig, Eval, EvalExecution
 
     agents = [
         AgentConfig(agent_type="opencode", agent_model="llama.cpp ai/qwen3.6-27b"),
@@ -149,10 +147,28 @@ if __name__ == "__main__":
     ]
 
     evals = [
-        Eval(number=1,eval_dir="encode_repo_forgetful",description="",run_count=1, tags=["forgetful", "python"]),
-        Eval(number=2,eval_dir="inflection_bug_fix",description="",run_count=1, tags=["python", "bugs"]),
-        Eval(number=3,eval_dir="mapping_exercise",description="",run_count=1, tags=["python", "ruby"]),
-        Eval(number=4,eval_dir="chess_engine",description="",run_count=1, tags=["rust"]),
+        Eval(
+            number=1,
+            eval_dir="encode_repo_forgetful",
+            description="",
+            run_count=1,
+            tags=["forgetful", "python"],
+        ),
+        Eval(
+            number=2,
+            eval_dir="inflection_bug_fix",
+            description="",
+            run_count=1,
+            tags=["python", "bugs"],
+        ),
+        Eval(
+            number=3,
+            eval_dir="mapping_exercise",
+            description="",
+            run_count=1,
+            tags=["python", "ruby"],
+        ),
+        Eval(number=4, eval_dir="chess_engine", description="", run_count=1, tags=["rust"]),
     ]
     agent_evals_to_exec = [
         AgentEvalExecution(
@@ -160,18 +176,11 @@ if __name__ == "__main__":
             total_score=0,
             total_tokens=0,
             total_time_taken_seconds=0,
-            evals_executions=[
-                EvalExecution(id=uuid4(), eval=e, agent_config=agent) for e in evals
-            ],
-            status = "pending",
-        ) for agent in agents 
+            evals_executions=[EvalExecution(id=uuid4(), eval=e, agent_config=agent) for e in evals],
+            status="pending",
+        )
+        for agent in agents
     ]
 
     json_repo = JsonEvaluationResultsRepository(run_dir="./output/tests")
     json_repo.export(agent_evals_to_exec)
-
-
-
-
-
-    

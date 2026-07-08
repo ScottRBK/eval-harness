@@ -9,7 +9,7 @@ that fail in *different* ways — and ask the agent to write a `python eval.py` 
 `bracket_balance.py` implementation and prints a `EVAL_SCORE=<float>` verdict. We then run the
 agent's scorer against each held-out solution and measure how well it separates golden from broken.
 
-The score is made up of a discrimination term (golden minus average-broken, clamped to >= 0), 
+The score is made up of a discrimination term (golden minus average-broken, clamped to >= 0),
 
 Held-out task (fixtures/prompt.md): a balanced-bracket checker. We pick a small pure-Python task on
 purpose so (a) the agent never needs to see the golden solution to derive good tests, and (b) the
@@ -35,6 +35,7 @@ the agent writes is neither run nor graded. A correct scorer paired with a broke
 bad prompt shape, etc.) still scores full marks here. This eval measures one sub-skill of eval
 authoring, not the whole thing.
 """
+
 from src.helpers.file_helper import read_eval_fixture
 
 # Module-level placeholders keep linters happy; they are NEVER shipped to the container.
@@ -49,35 +50,35 @@ PROMPT = ""
 
 
 class EvalGenerator:
-
     arrange_embedded_values = {
         "DESIGNER_EVAL_DIR": "/workspace/brackets_eval",
     }
 
     act_embedded_values = {
         "DESIGNER_EVAL_DIR": "/workspace/brackets_eval",
-        "PROMPT":            read_eval_fixture(__file__, "prompt.md"),
+        "PROMPT": read_eval_fixture(__file__, "prompt.md"),
     }
 
     score_embedded_values = {
-        "DESIGNER_EVAL_DIR":  "/workspace/brackets_eval",
-        "GOLDEN_DIR":         "/workspace/golden",
-        "BROKEN_WRONG_DIR":   "/workspace/broken_wrong",
-        "BROKEN_CRASH_DIR":   "/workspace/broken_crash",
-        "GOLDEN_IMPL":        read_eval_fixture(__file__, "golden.py"),
+        "DESIGNER_EVAL_DIR": "/workspace/brackets_eval",
+        "GOLDEN_DIR": "/workspace/golden",
+        "BROKEN_WRONG_DIR": "/workspace/broken_wrong",
+        "BROKEN_CRASH_DIR": "/workspace/broken_crash",
+        "GOLDEN_IMPL": read_eval_fixture(__file__, "golden.py"),
         "BROKEN_WRONG_IMPL": read_eval_fixture(__file__, "broken_wrong.py"),
-        "BROKEN_CRASH_IMPL":  read_eval_fixture(__file__, "broken_crash.py"),
-        "PASS_THRESHOLD":     0.8,
-        "FAIL_THRESHOLD":     0.2,
+        "BROKEN_CRASH_IMPL": read_eval_fixture(__file__, "broken_crash.py"),
+        "PASS_THRESHOLD": 0.8,
+        "FAIL_THRESHOLD": 0.2,
     }
 
     async def arrange(self) -> None:
-        import os  
+        import os
+
         os.makedirs(DESIGNER_EVAL_DIR, exist_ok=True)
 
     async def act(self):
-        import os 
-        from agent_shell.shell import  AgentShell
+        import os
+        from agent_shell.shell import AgentShell
         from agent_shell.models.agent import AgentType
 
         shell = AgentShell(AgentType(os.environ["AGENT_TYPE"]))
@@ -91,7 +92,6 @@ class EvalGenerator:
         print(response.response)
         print(f"Session: {response.session_id}")
 
-
     async def score(self):
         import os
         import subprocess
@@ -104,10 +104,9 @@ class EvalGenerator:
             return
 
         solutions = {
-            "golden":       (GOLDEN_DIR,       GOLDEN_IMPL),
+            "golden": (GOLDEN_DIR, GOLDEN_IMPL),
             "broken_wrong": (BROKEN_WRONG_DIR, BROKEN_WRONG_IMPL),
-            "broken_crash":  (BROKEN_CRASH_DIR,  BROKEN_CRASH_IMPL),
-
+            "broken_crash": (BROKEN_CRASH_DIR, BROKEN_CRASH_IMPL),
         }
         for dirpath, body in solutions.values():
             os.makedirs(dirpath, exist_ok=True)
@@ -143,13 +142,15 @@ class EvalGenerator:
                     print(f"[diag {label}]   {t}")
             return 0.0 if scraped is None else scraped
 
-        golden        = run_against("golden", GOLDEN_DIR)
-        broken_wrong  = run_against("broken_wrong", BROKEN_WRONG_DIR)
-        broken_crash  = run_against("broken_crash", BROKEN_CRASH_DIR)
+        golden = run_against("golden", GOLDEN_DIR)
+        broken_wrong = run_against("broken_wrong", BROKEN_WRONG_DIR)
+        broken_crash = run_against("broken_crash", BROKEN_CRASH_DIR)
 
         avg_broken = (broken_wrong + broken_crash) / 2
         discrimination = max(0.0, golden - avg_broken)
 
-        print(f"golden={golden} broken_wrong={broken_wrong} broken_crash={broken_crash} "
-              f"discrimination={discrimination}")
+        print(
+            f"golden={golden} broken_wrong={broken_wrong} broken_crash={broken_crash} "
+            f"discrimination={discrimination}"
+        )
         print(f"EVAL_SCORE={discrimination}")

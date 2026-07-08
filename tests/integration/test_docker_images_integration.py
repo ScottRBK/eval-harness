@@ -8,8 +8,7 @@ pytestmark = pytest.mark.integration
 
 RUST_IMAGE = "eval-harness-rust:latest"
 RUST_BUILD_COMMAND = (
-    "docker build -t eval-harness-rust:latest "
-    "-f src/docker/rust/Dockerfile src/docker/"
+    "docker build -t eval-harness-rust:latest -f src/docker/rust/Dockerfile src/docker/"
 )
 
 
@@ -33,14 +32,16 @@ def test_rust_image_can_compile_and_run_a_tiny_crate(
 
     try:
         # Act
-        exit_code, output = container.exec_run([
-            "sh",
-            "-lc",
-            "rustc --version && "
-            "cargo --version && "
-            "cargo new --bin /tmp/rust-smoke --quiet && "
-            "cargo run --quiet --manifest-path /tmp/rust-smoke/Cargo.toml",
-        ])
+        exit_code, output = container.exec_run(
+            [
+                "sh",
+                "-lc",
+                "rustc --version && "
+                "cargo --version && "
+                "cargo new --bin /tmp/rust-smoke --quiet && "
+                "cargo run --quiet --manifest-path /tmp/rust-smoke/Cargo.toml",
+            ]
+        )
         buffer = output.decode(errors="replace")
 
         # Assert

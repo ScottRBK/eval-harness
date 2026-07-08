@@ -15,6 +15,7 @@ Anti-cheat: the move-generation primitives never receive a position+depth, so th
 counts cannot be hard-coded into them. score() additionally rejects any third-party dependency
 (std-only is required), and act() disallows web search/fetch so engine source cannot be pulled.
 """
+
 from src.helpers.file_helper import read_eval_fixture
 
 REPO_URL = ""
@@ -25,7 +26,6 @@ INTEGRATION_TESTS = ""
 
 
 class ChessEngine:
-
     image = "eval-harness-rust:latest"
 
     arrange_embedded_values = {
@@ -49,8 +49,19 @@ class ChessEngine:
 
         print("cloning github repo")
         subprocess.run(
-            ["git", "-c", "advice.detachedHead=false", "clone", "--quiet",
-             "--depth", "1", "--branch", REPO_REF, REPO_URL, REPO_DIR],
+            [
+                "git",
+                "-c",
+                "advice.detachedHead=false",
+                "clone",
+                "--quiet",
+                "--depth",
+                "1",
+                "--branch",
+                REPO_REF,
+                REPO_URL,
+                REPO_DIR,
+            ],
             check=True,
         )
         print("repo cloned")
@@ -109,7 +120,9 @@ class ChessEngine:
             # on a non-zero phase exit. We parse the summary line instead.
             result = subprocess.run(
                 ["cargo", "test", "--release", "--test", "integration_tests"],
-                cwd=REPO_DIR, capture_output=True, text=True,
+                cwd=REPO_DIR,
+                capture_output=True,
+                text=True,
             )
             print(result.stdout)
             print(result.stderr)

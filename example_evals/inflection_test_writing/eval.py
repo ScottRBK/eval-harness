@@ -1,12 +1,12 @@
 """
 This eval inverts the bug_fix pattern: instead of grading the agent's code with our tests, it
 grades the agent's TESTS with our code. The agent is handed inflection (pinned upstream 0.5.1)
-with its test suite deleted and is asked to write one. 
-In addition to this, There is no pyproject.toml file  and no pytest installed in the container image, 
-so the agent has to figure this out. 
-score() then grades the suite by mutation testing: the harness holds a set of small behavioural 
-faults (mutants) as a fixture, applies them to the module one at a time, and scores the fraction of 
-mutants the suite kills (at least one test fails). 
+with its test suite deleted and is asked to write one.
+In addition to this, There is no pyproject.toml file  and no pytest installed in the container image,
+so the agent has to figure this out.
+score() then grades the suite by mutation testing: the harness holds a set of small behavioural
+faults (mutants) as a fixture, applies them to the module one at a time, and scores the fraction of
+mutants the suite kills (at least one test fails).
 
 The harness owns the truth end to end - fixture-injection applied to the source itself:
 - The pristine module bytes live in a fixture and are written over whatever the agent left at
@@ -27,6 +27,7 @@ Anti-cheat layers:
   mind when adding mutants.
 - act() disallows web search/fetch - the upstream suite is public.
 """
+
 from src.helpers.file_helper import read_eval_fixture
 
 REPO_URL = ""
@@ -39,7 +40,6 @@ MUTANTS_DOC = ""
 
 
 class InflectionTestWriting:
-
     arrange_embedded_values = {
         "REPO_URL": "https://github.com/jpvanhal/inflection",
         "REPO_REF": "0.5.1",
@@ -64,8 +64,19 @@ class InflectionTestWriting:
 
         print("cloning github repo")
         subprocess.run(
-            ["git", "-c", "advice.detachedHead=false", "clone", "--quiet",
-             "--depth", "1", "--branch", REPO_REF, REPO_URL, REPO_DIR],
+            [
+                "git",
+                "-c",
+                "advice.detachedHead=false",
+                "clone",
+                "--quiet",
+                "--depth",
+                "1",
+                "--branch",
+                REPO_REF,
+                REPO_URL,
+                REPO_DIR,
+            ],
             check=True,
         )
         print("repo cloned")
@@ -73,9 +84,12 @@ class InflectionTestWriting:
         print("removing upstream test suite and git history")
         subprocess.run(["rm", "-rf", os.path.join(REPO_DIR, ".git")], check=True)
         subprocess.run(
-            ["rm", "-f",
-             os.path.join(REPO_DIR, "test_inflection.py"),
-             os.path.join(REPO_DIR, "tox.ini")],
+            [
+                "rm",
+                "-f",
+                os.path.join(REPO_DIR, "test_inflection.py"),
+                os.path.join(REPO_DIR, "tox.ini"),
+            ],
             check=True,
         )
         print("upstream test suite and git history removed")

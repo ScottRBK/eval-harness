@@ -3,8 +3,8 @@ Protocol for building an evauluation file:
 
 Evaluation Files act as a means of supplying python scripts required to perform three stages
 of the evaluation, following arrange-act-assert principle from automated software testing:
-- Arrange 
-- Act 
+- Arrange
+- Act
 - Assert (renamed to Score as Assert is a python keyword in the std lib)
 
 The contract for the Evaluation File Protocol stipulates that there must be three methods:
@@ -15,11 +15,11 @@ shall be evaluated in the Score phase
 *Score* - phase responsible for evaluating the output of the task
 
 Important considerations for each evaluation file:
-- Any import statements must be lazy loaded inside the methods themselves    
+- Any import statements must be lazy loaded inside the methods themselves
 - each stage can have key/value pairs passed to it using:
     - arrange_embedded_values, act_embedded_values, score_embedded_values
 
-    Example: 
+    Example:
 
     act_embedded_values = {
         "ENCODING_PROMPT": read_eval_fixture(__file__, "encoding_prompt.md")
@@ -27,12 +27,12 @@ Important considerations for each evaluation file:
 
 
 """
-from typing import Protocol, runtime_checkable 
 
-@runtime_checkable 
+from typing import Protocol, runtime_checkable
+
+
+@runtime_checkable
 class EvaluationFile(Protocol):
     async def arrange(self) -> None: ...
     async def act(self) -> None: ...
     async def score(self) -> None: ...
-
-

@@ -40,9 +40,7 @@ def claude_token(monkeypatch):
 def opencode_creds(tmp_path, monkeypatch):
     creds = tmp_path / "auth.json"
     creds.write_text("{}")
-    monkeypatch.setattr(
-        "src.docker_runner.settings.OPENCODE_CREDENTIALS_LOC", str(creds)
-    )
+    monkeypatch.setattr("src.docker_runner.settings.OPENCODE_CREDENTIALS_LOC", str(creds))
     return creds
 
 
@@ -50,17 +48,13 @@ def opencode_creds(tmp_path, monkeypatch):
 def codex_creds(tmp_path, monkeypatch):
     creds = tmp_path / "auth.json"
     creds.write_text("{}")
-    monkeypatch.setattr(
-        "src.docker_runner.settings.CODEX_CREDENTIALS_LOC", str(creds)
-    )
+    monkeypatch.setattr("src.docker_runner.settings.CODEX_CREDENTIALS_LOC", str(creds))
     return creds
 
 
 @pytest.fixture
 def copilot_token(monkeypatch):
-    monkeypatch.setattr(
-        "src.docker_runner.settings.COPILOT_GITHUB_TOKEN", "tok-copilot"
-    )
+    monkeypatch.setattr("src.docker_runner.settings.COPILOT_GITHUB_TOKEN", "tok-copilot")
     return "tok-copilot"
 
 
@@ -197,9 +191,7 @@ class TestProvisionAgent:
         assert prov.environment == {}
         assert prov.volumes
 
-    def test_opencode_volumes_include_credentials_and_config_binds(
-        self, opencode_creds
-    ):
+    def test_opencode_volumes_include_credentials_and_config_binds(self, opencode_creds):
         # Arrange
         runner = DockerRunner(AgentType.OPENCODE, "model")
 
@@ -320,9 +312,7 @@ class TestDockerRun:
             ],
         ]
 
-    def test_passes_empty_agent_effort_env_when_unset(
-        self, claude_token, make_docker_client
-    ):
+    def test_passes_empty_agent_effort_env_when_unset(self, claude_token, make_docker_client):
         # Arrange — no effort configured. docker-py turns a None env *value* into a
         # bare key the container inherits (and thus leaves unset), which would make
         # the eval's os.environ["AGENT_EFFORT"] KeyError — so it must coerce to "".
@@ -353,9 +343,7 @@ class TestDockerRun:
         env = client.containers.run.call_args.kwargs["environment"]
         assert env["AGENT_EFFORT"] == "high"
 
-    def test_unset_effort_omits_effort_from_container_name(
-        self, claude_token, make_docker_client
-    ):
+    def test_unset_effort_omits_effort_from_container_name(self, claude_token, make_docker_client):
         # Arrange — regression: a None effort once rendered the literal "_None"
         # suffix (eval_harness_..._model_None) because the f-string stringifies None.
         client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
@@ -391,9 +379,7 @@ class TestDockerRun:
         assert low == "eval_harness_claude_code_model_low"
         assert high != low
 
-    def test_parses_score_from_last_eval_score_line(
-        self, claude_token, make_docker_client
-    ):
+    def test_parses_score_from_last_eval_score_line(self, claude_token, make_docker_client):
         # Arrange — a stale early score and trailing noise must not win
         score_output = "EVAL_SCORE=0.10\nnoise\nEVAL_SCORE=0.85\ntrailing noise"
         client = make_docker_client([("ok", 0), ("ok", 0), (score_output, 0)])
@@ -417,16 +403,12 @@ class TestDockerRun:
         import logging
 
         # Arrange — a distinctive multi-line phase output
-        client = make_docker_client(
-            [("alpha\nbravo", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)]
-        )
+        client = make_docker_client([("alpha\nbravo", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
         runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
 
         # Act
         with caplog.at_level(logging.INFO, logger="src.docker_runner"):
-            with mock.patch(
-                "src.docker_runner.docker.from_env", return_value=client
-            ):
+            with mock.patch("src.docker_runner.docker.from_env", return_value=client):
                 runner.docker_run("a", "b", "c", "img")
 
         # Assert — the raw chunk dump is gone and each line is logged exactly once
@@ -436,13 +418,9 @@ class TestDockerRun:
         assert caplog.text.count("alpha") == 1
         assert caplog.text.count("bravo") == 1
 
-    def test_score_defaults_to_zero_without_eval_score_line(
-        self, claude_token, make_docker_client
-    ):
+    def test_score_defaults_to_zero_without_eval_score_line(self, claude_token, make_docker_client):
         # Arrange
-        client = make_docker_client(
-            [("ok", 0), ("ok", 0), ("no score here\njust logs", 0)]
-        )
+        client = make_docker_client([("ok", 0), ("ok", 0), ("no score here\njust logs", 0)])
         runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
 
         # Act
@@ -453,9 +431,7 @@ class TestDockerRun:
         assert result.score == 0.0
         assert result.total_tokens == 0
 
-    def test_sums_total_token_markers_across_all_phases(
-        self, claude_token, make_docker_client
-    ):
+    def test_sums_total_token_markers_across_all_phases(self, claude_token, make_docker_client):
         # Arrange
         client = make_docker_client(
             [
@@ -473,9 +449,7 @@ class TestDockerRun:
         # Assert
         assert result.total_tokens == 42
 
-    def test_ignores_malformed_total_token_markers(
-        self, claude_token, make_docker_client, caplog
-    ):
+    def test_ignores_malformed_total_token_markers(self, claude_token, make_docker_client, caplog):
         # Arrange
         client = make_docker_client(
             [
@@ -494,9 +468,7 @@ class TestDockerRun:
         assert result.total_tokens == 7
         assert "Ignoring malformed token marker line" in caplog.text
 
-    def test_malformed_score_line_raises_friendly_error(
-        self, claude_token, make_docker_client
-    ):
+    def test_malformed_score_line_raises_friendly_error(self, claude_token, make_docker_client):
         # Arrange — an EVAL_SCORE= line that isn't a number
         client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=pass", 0)])
         runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
@@ -506,9 +478,7 @@ class TestDockerRun:
             with pytest.raises(RuntimeError, match="EVAL_SCORE=pass"):
                 runner.docker_run("a", "b", "c", "img")
 
-    def test_nonzero_phase_exit_raises_runtimeerror(
-        self, claude_token, make_docker_client
-    ):
+    def test_nonzero_phase_exit_raises_runtimeerror(self, claude_token, make_docker_client):
         # Arrange — arrange phase exits non-zero
         client = make_docker_client([("boom", 1), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
         runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
@@ -550,9 +520,7 @@ class TestDockerRun:
         assert result.score == 1.0
         assert all(s._response.close.called for s in client._streams)
 
-    def test_stale_container_removed_before_run(
-        self, claude_token, make_docker_client
-    ):
+    def test_stale_container_removed_before_run(self, claude_token, make_docker_client):
         # Arrange — a stale container exists this time
         client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
         client.containers.get.side_effect = None
@@ -568,9 +536,7 @@ class TestDockerRun:
         client.containers.get.assert_called_once_with("eval_harness_claude_code_model")
         stale.remove.assert_called_once_with(force=True)
 
-    def test_missing_stale_container_is_ignored(
-        self, claude_token, make_docker_client
-    ):
+    def test_missing_stale_container_is_ignored(self, claude_token, make_docker_client):
         # Arrange — default fake client raises NotFound on get
         client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=0.5", 0)])
         runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
@@ -656,9 +622,7 @@ class TestHealthCheck:
         assert result.healthy is False
         assert "Unexpected server error" in (result.exception or "")
 
-    def test_nonzero_exit_raises_runtimeerror_not_unhealthy(
-        self, claude_token, health_timeout
-    ):
+    def test_nonzero_exit_raises_runtimeerror_not_unhealthy(self, claude_token, health_timeout):
         # Arrange — a real in-container crash (import error, asyncio panic). This
         # is a harness problem, not 'the model backend is down today', so it must
         # raise (-> FAILED) rather than return an unhealthy verdict.
