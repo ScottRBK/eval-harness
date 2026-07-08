@@ -20,6 +20,7 @@ dependencies = [
 packages = ["src"]
 
 [tool.pytest.ini_options]
+pythonpath = ["."]
 addopts = ["--strict-markers", "-m", "not integration"]
 markers = [
     "integration: tests that exercise real Docker/container behaviour",
