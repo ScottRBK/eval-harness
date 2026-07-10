@@ -48,6 +48,16 @@ print('codex provisioning visible')
 """,
     ),
     (
+        AgentType.PI,
+        "provision-pi",
+        """
+from pathlib import Path
+credentials = Path('/home/node/.pi/agent/auth.json')
+assert credentials.read_text() == '{"pi": true}'
+print('pi provisioning visible')
+""",
+    ),
+    (
         AgentType.OPENCODE,
         "provision-opencode",
         """
@@ -79,10 +89,13 @@ def test_agent_provisioning_is_visible_inside_real_container(
     # Arrange
     require_docker_image(IMAGE, BUILD_COMMAND)
     codex_auth = tmp_path / "codex" / "auth.json"
+    pi_auth = tmp_path / "pi" / "auth.json"
     opencode_auth = tmp_path / "opencode" / "auth.json"
     codex_auth.parent.mkdir()
+    pi_auth.parent.mkdir()
     opencode_auth.parent.mkdir()
     codex_auth.write_text('{"codex": true}')
+    pi_auth.write_text('{"pi": true}')
     opencode_auth.write_text('{"opencode": true}')
     monkeypatch.setattr(
         "src.docker_runner.settings.CLAUDE_CODE_OAUTH_TOKEN",
@@ -95,6 +108,10 @@ def test_agent_provisioning_is_visible_inside_real_container(
     monkeypatch.setattr(
         "src.docker_runner.settings.CODEX_CREDENTIALS_LOC",
         str(codex_auth),
+    )
+    monkeypatch.setattr(
+        "src.docker_runner.settings.PI_CREDENTIALS_LOC",
+        str(pi_auth),
     )
     monkeypatch.setattr(
         "src.docker_runner.settings.OPENCODE_CREDENTIALS_LOC",

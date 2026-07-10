@@ -78,6 +78,14 @@ class DockerRunner:
             )
         return AgentProvisioning(volumes=self._staged_mount([auth], "/home/node/.codex"))
 
+    def _setup_pi(self) -> AgentProvisioning:
+        auth = Path(settings.PI_CREDENTIALS_LOC).expanduser()
+        if not auth.exists():
+            raise RuntimeError(
+                f"Pi auth file not found at {auth} (run `pi` then `/login` on the host)"
+            )
+        return AgentProvisioning(volumes=self._staged_mount([auth], "/home/node/.pi/agent"))
+
     def _setup_copilot(self) -> AgentProvisioning:
         if not settings.COPILOT_GITHUB_TOKEN:
             raise RuntimeError(
@@ -117,6 +125,8 @@ class DockerRunner:
                 return self._setup_opencode()
             case AgentType.CODEX:
                 return self._setup_codex()
+            case AgentType.PI:
+                return self._setup_pi()
             case AgentType.COPILOT_CLI:
                 return self._setup_copilot()
             case _:

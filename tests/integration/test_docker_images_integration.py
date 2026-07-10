@@ -10,6 +10,23 @@ RUST_IMAGE = "eval-harness-rust:latest"
 RUST_BUILD_COMMAND = (
     "docker build -t eval-harness-rust:latest -f src/docker/rust/Dockerfile src/docker/"
 )
+BASE_IMAGE = "eval-harness:latest"
+BASE_BUILD_COMMAND = "docker build -t eval-harness:latest -f src/docker/Dockerfile src/docker/"
+
+
+def test_base_image_has_pi_cli(require_docker_image, docker_client):
+    """Pi is installed in the same image used by every evaluation."""
+    require_docker_image(BASE_IMAGE, BASE_BUILD_COMMAND)
+
+    output = docker_client.containers.run(
+        image=BASE_IMAGE,
+        command=["pi", "--version"],
+        remove=True,
+        stdout=True,
+        stderr=True,
+    )
+
+    assert output
 
 
 def test_rust_image_can_compile_and_run_a_tiny_crate(

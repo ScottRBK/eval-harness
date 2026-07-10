@@ -14,6 +14,7 @@ prefixed with `EVAL_HARNESS_`
 |`CLAUDE_CODE_OAUTH_TOKEN`|string|OAuth token to use with the claude code, obtained by typing `claude setup-token`||
 |`OPENCODE_CREDENTIALS_LOC`|string|Path to the OpenCode `auth.json`; it is copied and mounted into the container for OpenCode agents|`~/.local/share/opencode/auth.json`|
 |`CODEX_CREDENTIALS_LOC`|string|Path to the Codex `auth.json` (from `codex login`); a throwaway copy is mounted into the container so Codex can refresh the token without touching the host file|`~/.codex/auth.json`|
+|`PI_CREDENTIALS_LOC`|string|Path to Pi's `auth.json`; it is copied and mounted into the container for Pi agents|`~/.pi/agent/auth.json`|
 |`COPILOT_GITHUB_TOKEN`|string|GitHub token for the Copilot CLI agent, passed to the container as an environment variable. See [authorisation](authorisation.md) for the required permissions||
 |`GITHUB_TOKEN`|string|Harness-level GitHub token for cloning private repos inside the container. Injected as `GH_TOKEN`; unset means public-repo clones only. See [authorisation](authorisation.md#private-repositories-harness-level-github-token)||
 |`AZURE_DEVOPS_PAT`|string|Harness-level Azure DevOps PAT for cloning private Azure DevOps repos inside the container. Injected as `ADO_PAT`; unset means clones rely on existing container git credentials||
@@ -65,9 +66,9 @@ the file.
 
 |Field|Type|Description|Example|
 |-----|----|-----------|-------|
-|`agent_type`|string|The CLI agent to run. One of `claude_code`, `opencode`, `copilot_cli`, `codex` (`gemini_cli` and `pi` are not yet implemented)|`opencode`|
-|`agent_model`|string|Model identifier for the agent. Agent-specific: `haiku`/`sonnet`/`opus` for `claude_code`, or a `provider/model` from the OpenCode config for `opencode`|`llama.cpp ai/qwen3.6-27b-8Q`|
-|`effort`|string|Optional — reasoning-effort level passed to the agent at runtime via the `AGENT_EFFORT` env var (`claude_code` applies it as its `--effort` flag; `opencode` currently accepts but ignores it). Also appended to the agent's log filename and recorded in the results (`agent_effort`), so agents sharing a type and model stay distinguishable|`high`|
+|`agent_type`|string|The CLI agent to run. One of `claude_code`, `opencode`, `copilot_cli`, `codex`, `pi` (`gemini_cli` is not yet implemented)|`opencode`|
+|`agent_model`|string|Model identifier for the agent. Agent-specific: `haiku`/`sonnet`/`opus` for `claude_code`; a `provider/model` from the OpenCode config for `opencode`; or Pi's provider/model identifier, such as `openai-codex/gpt-5.4-mini`|`llama.cpp ai/qwen3.6-27b-8Q`|
+|`effort`|string|Optional — reasoning-effort level passed to the agent at runtime via the `AGENT_EFFORT` env var (`claude_code` applies it as `--effort`; Pi maps it to `--thinking`; `opencode` currently accepts but ignores it). Also appended to the agent's log filename and recorded in the results (`agent_effort`), so agents sharing a type and model stay distinguishable|`high`|
 |`processing_group`|string|Optional — agents sharing a group run serially, never concurrently. Ungrouped agents and separate groups run in parallel up to `MAX_AGENT_CONCURRENCY`. Use it to pin agents that share a backend such as a single inference server|`bosman-server`|
 
 ```json
@@ -86,6 +87,8 @@ the file.
 ```
 
 OpenCode providers and models are defined in `src/docker/configs/opencode/opencode.json`.
+Pi has no native MCP support, so do not include it in an evaluation that uses MCP, such as
+`encode_repo_forgetful`.
 
 ### Specifying Evaluation File
 You can specify an evaluation file when you run the application using:

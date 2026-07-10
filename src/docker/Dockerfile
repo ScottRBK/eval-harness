@@ -8,6 +8,7 @@ ARG CLAUDE_CODE_VERSION=latest
 ARG OPENCODE_VERSION=latest
 ARG CODEX_VERSION=latest 
 ARG COPILOT_VERSION=latest 
+ARG PI_VERSION=latest
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
@@ -44,8 +45,8 @@ ENV PATH="/opt/venv/bin:${PATH}"
 RUN mkdir -p /usr/local/share/npm-global && \
     chown -R node:node /usr/local/share
 
-RUN mkdir -p /workspace /home/node/.claude /home/node/.local/share/opencode && \
-    chown -R node:node /workspace /home/node/.claude /home/node/.local
+RUN mkdir -p /workspace /home/node/.claude /home/node/.local/share/opencode /home/node/.pi/agent && \
+    chown -R node:node /workspace /home/node/.claude /home/node/.local /home/node/.pi
 
 WORKDIR /workspace
 
@@ -57,4 +58,5 @@ ENV PATH=$PATH:/usr/local/share/npm-global/bin
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} && \
     npm install -g opencode-ai@${OPENCODE_VERSION} && \
     npm install -g @github/copilot@${COPILOT_VERSION} && \
-    npm install -g @openai/codex@${CODEX_VERSION} 
+    npm install -g @openai/codex@${CODEX_VERSION} && \
+    npm install -g --ignore-scripts @earendil-works/pi-coding-agent@${PI_VERSION}
