@@ -2,7 +2,7 @@
 name: running-eval-harness-evaluations
 description: >-
     Run evaluations with the eval-harness framework. Use when asked to run, execute, benchmark or
-    compare CLI coding agents (Claude Code, OpenCode, Copilot, Codex) on existing evals.
+    compare CLI coding agents (Claude Code, OpenCode, Copilot, Codex, Pi) on existing evals.
 ---
 
 # Overview
@@ -39,6 +39,8 @@ composing a run:
   ungrouped agents run in parallel up to `EVAL_HARNESS_MAX_AGENT_CONCURRENCY`.
 - OpenCode models must exist as `provider/model` in
   `src/docker/configs/opencode/opencode.json`.
+- Pi has no native MCP support, so it cannot be included in a run of an MCP-backed evaluation such
+  as `encode_repo_forgetful`.
 
 ## Launch
 ```bash

@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     CLAUDE_CODE_OAUTH_TOKEN: str = ""
     OPENCODE_CREDENTIALS_LOC: str = "~/.local/share/opencode/auth.json"
     CODEX_CREDENTIALS_LOC: str = "~/.codex/auth.json"
+    PI_CREDENTIALS_LOC: str = "~/.pi/agent/auth.json"
     COPILOT_GITHUB_TOKEN: str = ""
     GITHUB_TOKEN: str = ""
 

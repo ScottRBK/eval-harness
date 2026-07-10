@@ -16,11 +16,12 @@ the `EVAL_HARNESS_` prefix (so the Codex row's setting is `EVAL_HARNESS_CODEX_CR
 | Claude Code | OAuth token (env)  | `claude setup-token`  | `CLAUDE_CODE_OAUTH_TOKEN` |
 | OpenCode    | Mounted auth file  | `opencode auth login` | `OPENCODE_CREDENTIALS_LOC`|
 | Codex       | Mounted auth file  | `codex login`         | `CODEX_CREDENTIALS_LOC`   |
+| Pi          | Mounted auth file  | `pi`, then `/login`    | `PI_CREDENTIALS_LOC`      |
 | Copilot CLI | GitHub token (env) | fine-grained PAT[^1]  | `COPILOT_GITHUB_TOKEN`    |
-| Pi | _not implemented_  | —                     | —                         |
 
 **Mounted auth file** — the harness stages a throwaway copy of the host auth file and bind-mounts it
-into the container (OpenCode to `/home/node/.local/share/opencode`, Codex to `/home/node/.codex`).
+into the container (OpenCode to `/home/node/.local/share/opencode`, Codex to `/home/node/.codex`,
+Pi to `/home/node/.pi/agent`).
 The agent may refresh the token in place during the run; the copy is discarded afterwards, so the
 host file is never touched. The `*_CREDENTIALS_LOC` setting is a path and defaults to the agent's
 standard location, so you usually need not set it.

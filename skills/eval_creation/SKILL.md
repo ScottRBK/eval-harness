@@ -2,7 +2,7 @@
 name: creating-eval-harness-evaluations
 description: >-
     Create a new evaluation for the eval-harness framework. Use when asked to build, generate or
-    scaffold an eval that tests a CLI coding agent (Claude Code, OpenCode, Copilot, Codex).
+    scaffold an eval that tests a CLI coding agent (Claude Code, OpenCode, Copilot, Codex, Pi).
 ---
 
 # Overview 
@@ -43,6 +43,8 @@ and methods cannot reference module-level state, class attributes or each other.
 (via `repr()`) ahead of the method body, so keys must be valid Python identifiers and values must
 be plain literals. Module-level placeholders (e.g. `REPO_URL = ""`) keep linters happy but are
 never shipped to the container.
+1. Pi has no native MCP support. An eval that configures MCP (such as `encode_repo_forgetful`)
+cannot be run with Pi unless it is excluded from that run's agent/eval pairing.
 
 ## Generating the evaluation
 1. Check whether the environment variable `EVAL_HARNESS_EVALS_DIRS` is set (if not, use the
@@ -83,4 +85,3 @@ be measured against the complex bit. Simple evaluations to hard tasks make great
 The eval-harness uses the [agent-shell](https://github.com/ScottRBK/agent-shell) package to prompt
 agents to perform tasks, the pattern examples will specify what features are utilised but it is also
 useful to be aware of its capabilities while building evaluations.
-

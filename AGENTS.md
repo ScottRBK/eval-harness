@@ -2,7 +2,7 @@
 
 ## What this is
 
-A Python framework that runs CLI coding agents (Claude Code, OpenCode, Copilot CLI, Codex) 
+A Python framework that runs CLI coding agents (Claude Code, OpenCode, Copilot CLI, Codex, Pi)
 inside Docker containers and grades their work.
 
 ## Commands
@@ -43,6 +43,8 @@ and builds an `AgentShell` from `agent_shell` (the unified CLI-agent wrapper ins
 
 ## Evaluations
 Each of the example evaluations maps to an evaluation pattern documented in `docs/eval_patterns`.
+Pi has no native MCP support, so it cannot run MCP-backed evaluations such as
+`encode_repo_forgetful`.
 
 Any change to the eval architecture or its constraints (the protocol, method extraction, embedded
 values) must include a review and update of README.md, AGENTS.md and the skills under `skills/`.
@@ -53,11 +55,9 @@ There is a `session.log` as well as a per agent log file.
 
 ## Status
 
-Working: Claude Code, OpenCode, Copilot, Codex
-Pi not yet implemented.
+Working: Claude Code, OpenCode, Copilot, Codex, Pi
 
 ## Repo Specific Instructions
 As a general rule, do not implement code automatically - the maintainer of this repository is a dinosaur
 and uses you for Q&A primarily and search. Only implement changes when explicitly instructed to do so.
-
 

@@ -10,7 +10,7 @@ The following agent harnesses are currently supported:
 - [x] Opencode
 - [x] Copilot
 - [x] Codex
-- [ ] Pi
+- [x] Pi
 
 A lot of this is possible thanks to the agentic harness abstraction repository 
 [agent-shell](https://github.com/ScottRBK/agent-shell), check it out if you have use cases where you 
@@ -181,7 +181,6 @@ The results file is written as either `results.json` (the default) or `results.c
 # Road Map
 - finish roadmap
 - CI/CD
-- extend support to pi coding agent harness
 - extend tui functionality (view results in tui)
 - polish console output
 - add direct api key authorisation for harnes

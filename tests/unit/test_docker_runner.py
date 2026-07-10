@@ -53,6 +53,14 @@ def codex_creds(tmp_path, monkeypatch):
 
 
 @pytest.fixture
+def pi_creds(tmp_path, monkeypatch):
+    creds = tmp_path / "auth.json"
+    creds.write_text("{}")
+    monkeypatch.setattr("src.docker_runner.settings.PI_CREDENTIALS_LOC", str(creds))
+    return creds
+
+
+@pytest.fixture
 def copilot_token(monkeypatch):
     monkeypatch.setattr("src.docker_runner.settings.COPILOT_GITHUB_TOKEN", "tok-copilot")
     return "tok-copilot"
@@ -234,6 +242,30 @@ class TestProvisionAgent:
             str(tmp_path / "missing.json"),
         )
         runner = DockerRunner(AgentType.CODEX, "model")
+
+        # Act / Assert
+        with pytest.raises(RuntimeError):
+            runner._provision_agent()
+
+    def test_pi_provisions_auth_volume_not_environment(self, pi_creds):
+        # Arrange
+        runner = DockerRunner(AgentType.PI, "model")
+
+        # Act
+        prov = runner._provision_agent()
+
+        # Assert — Pi authenticates via its staged auth.json, not an env var
+        assert prov.environment == {}
+        binds = {spec["bind"] for spec in prov.volumes.values()}
+        assert "/home/node/.pi/agent" in binds
+
+    def test_pi_without_auth_file_raises(self, tmp_path, monkeypatch):
+        # Arrange — point at a path that does not exist
+        monkeypatch.setattr(
+            "src.docker_runner.settings.PI_CREDENTIALS_LOC",
+            str(tmp_path / "missing.json"),
+        )
+        runner = DockerRunner(AgentType.PI, "model")
 
         # Act / Assert
         with pytest.raises(RuntimeError):
