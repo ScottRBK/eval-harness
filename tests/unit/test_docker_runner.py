@@ -14,7 +14,7 @@ import docker
 import pytest
 from agent_shell.models.agent import AgentType
 
-from src.docker_runner import DockerRunner
+from src.docker_runner import DockerRunner, build_image
 
 
 @pytest.fixture(autouse=True)
@@ -105,7 +105,56 @@ def _fake_exec_run_client(exec_run_result, stale=False):
 
 
 # --------------------------------------------------------------------------- #
-# A. _staged_mount — real filesystem behaviour via tmp_path
+# A. fixture image builds
+# --------------------------------------------------------------------------- #
+
+
+class TestBuildImage:
+    def test_uses_only_dockerfile_directory_as_build_context(self, tmp_path):
+        # Arrange
+        image_dir = tmp_path / "eval" / "fixtures" / "image"
+        image_dir.mkdir(parents=True)
+        dockerfile = image_dir / "Dockerfile"
+        dockerfile.write_text("FROM eval-harness:latest\n")
+        client = mock.Mock()
+        client.images.build.return_value = (mock.Mock(), iter([]))
+        log = mock.Mock()
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            result = build_image(dockerfile, "fixture:latest", log)
+
+        # Assert
+        assert result == "fixture:latest"
+        client.images.build.assert_called_once_with(
+            path=str(image_dir),
+            dockerfile="Dockerfile",
+            tag="fixture:latest",
+            rm=True,
+            forcerm=True,
+        )
+
+    def test_logs_build_output_when_build_fails(self, tmp_path, caplog):
+        # Arrange
+        import logging
+
+        dockerfile = tmp_path / "Dockerfile"
+        dockerfile.write_text("BROKEN\n")
+        client = mock.Mock()
+        build_log = iter([{"stream": "Step 1 failed\n"}])
+        client.images.build.side_effect = docker.errors.BuildError("bad build", build_log)
+        log = logging.getLogger("test.fixture-build")
+
+        # Act / Assert
+        with caplog.at_level(logging.ERROR, logger="test.fixture-build"):
+            with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+                with pytest.raises(docker.errors.BuildError):
+                    build_image(dockerfile, "fixture:latest", log)
+        assert "Step 1 failed" in caplog.text
+
+
+# --------------------------------------------------------------------------- #
+# B. _staged_mount — real filesystem behaviour via tmp_path
 # --------------------------------------------------------------------------- #
 
 

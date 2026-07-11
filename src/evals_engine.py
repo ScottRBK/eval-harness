@@ -10,17 +10,55 @@ from pathlib import Path
 from queue import Queue, Empty
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 from datetime import datetime
 from uuid import UUID
 
 from src.models import AgentEvalExecution, AgentEvalStatus
-from src.docker_runner import DockerRunner
+from src.docker_runner import DockerRunner, build_image
 from src.logging_config import agent_logger
+from src.helpers.naming import safe_name
 from src.config.settings import settings
 from src.evaluation_file_protocol import EvaluationFile
 
 
 logger = logging.getLogger(__name__)
+
+
+class EvalImageResolver:
+    """Resolve prebuilt images and build each eval-owned Dockerfile once per session."""
+
+    def __init__(self):
+        self._built_images: dict[Path, str] = {}
+        self._lock = Lock()
+
+    def resolve(self, eval_dir: str, eval_cls, log: logging.Logger) -> str:
+        image = getattr(eval_cls, "image", None)
+        dockerfile_value = getattr(eval_cls, "dockerfile", None)
+
+        if image and dockerfile_value:
+            raise ValueError(f"Eval {eval_dir!r} cannot declare both 'image' and 'dockerfile'")
+        if not dockerfile_value:
+            return image or settings.BASE_IMAGE
+
+        dockerfile_relative = Path(dockerfile_value)
+        if dockerfile_relative.is_absolute():
+            raise ValueError(f"Eval {eval_dir!r} Dockerfile path must be relative")
+
+        eval_root = _resolve_eval_file(eval_dir).parent.resolve()
+        dockerfile = (eval_root / dockerfile_relative).resolve()
+        if not dockerfile.is_relative_to(eval_root):
+            raise ValueError(f"Eval {eval_dir!r} Dockerfile must be inside its eval directory")
+        if not dockerfile.is_file():
+            raise FileNotFoundError(f"Eval {eval_dir!r} Dockerfile not found: {dockerfile}")
+
+        with self._lock:
+            if dockerfile not in self._built_images:
+                name = safe_name(eval_dir).lower()
+                tag = f"eval-harness-fixture-{name}:latest"
+                self._built_images[dockerfile] = build_image(dockerfile, tag, log)
+            return self._built_images[dockerfile]
+
 
 _AGENT_SHELL_TOKEN_TRACKER = """
 try:
@@ -46,7 +84,11 @@ if _EvalHarnessAgentShell is not None:
 
 
 def run_agent(
-    aee: AgentEvalExecution, progress: Queue, run_dir=None, session_id: UUID | None = None
+    aee: AgentEvalExecution,
+    progress: Queue,
+    run_dir=None,
+    session_id: UUID | None = None,
+    image_resolver: EvalImageResolver | None = None,
 ):
 
     log = logger  # fallback so the except block always has a valid logger
@@ -74,11 +116,13 @@ def run_agent(
             progress.put("update")
             return
 
+        image_resolver = image_resolver or EvalImageResolver()
+
         for eval_exec in aee.evals_executions:
             log.info(f"Loading Evalaution {eval_exec.eval.number} - {eval_exec.eval.description}")
             eval_mod = _load_eval_class(eval_exec.eval.eval_dir)
 
-            image = getattr(eval_mod, "image", "eval-harness:latest")
+            image = image_resolver.resolve(eval_exec.eval.eval_dir, eval_mod, log)
 
             # Small reminder - we split per phase as to ensure we do not get a leak of certain
             # embedded values in to the container, for example answers used in the score phase
@@ -174,11 +218,12 @@ def run_session(
     """Run every agent/processing group in parallel, one worker thread per agent."""
     progress: Queue = Queue()
     chains = _build_processing_chains(aees=agent_eval_executions)
+    image_resolver = EvalImageResolver()
 
     def _run_chain(chain):
         for aee in chain:
             try:
-                run_agent(aee, progress, run_dir, session_id)
+                run_agent(aee, progress, run_dir, session_id, image_resolver)
             except Exception as e:
                 logger.error(
                     f"Agent {aee.agent_config.agent_type}-{aee.agent_config.agent_model} "

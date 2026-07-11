@@ -176,10 +176,12 @@ def fake_eval_loading(monkeypatch):
 
     monkeypatch.setattr("src.evals_engine._method_to_script", _fake_method_to_script)
 
-    def _install(image=None):
+    def _install(image=None, dockerfile=None):
         mod = SimpleNamespace(arrange="ARRANGE", act="ACT", score="SCORE")
         if image is not None:
             mod.image = image
+        if dockerfile is not None:
+            mod.dockerfile = dockerfile
         monkeypatch.setattr("src.evals_engine._load_eval_class", lambda eval_dir: mod)
         return mod
 
@@ -217,7 +219,7 @@ def recording_run_agent(monkeypatch):
     lock = threading.Lock()
 
     def _install(hold=0.0, barrier=None, fail_models=()):
-        def _fake_run_agent(aee, progress, run_dir=None, session_id=None):
+        def _fake_run_agent(aee, progress, run_dir=None, session_id=None, image_resolver=None):
             group = aee.agent_config.processing_group
             model = aee.agent_config.agent_model
             with lock:
@@ -417,6 +419,103 @@ class TestRunAgent:
 
         # Assert
         assert recorder.calls[0].image == "eval-harness:latest"
+
+    def test_builds_fixture_image_once_for_parallel_agents(
+        self,
+        tmp_path,
+        monkeypatch,
+        fake_runner,
+        fake_eval_loading,
+    ):
+        # Arrange
+        image_dir = tmp_path / "e1" / "fixtures" / "image"
+        image_dir.mkdir(parents=True)
+        dockerfile = image_dir / "Dockerfile"
+        dockerfile.write_text("FROM eval-harness:latest\n")
+        (tmp_path / "e1" / "eval.py").write_text("# resolved separately from fake loading\n")
+        monkeypatch.setattr("src.evals_engine.settings.EVALS_DIRS", str(tmp_path))
+        fake_eval_loading(dockerfile="fixtures/image/Dockerfile")
+        fake_runner([(1.0, 1.0), (1.0, 1.0)])
+        builds = []
+
+        def _build_image(path, tag, log):
+            builds.append((path, tag))
+            return tag
+
+        monkeypatch.setattr("src.evals_engine.build_image", _build_image)
+        agents = [_make_aee(["e1"], agent_model=f"m{i}") for i in range(2)]
+
+        # Act
+        run_session(agents, on_update=lambda: None, max_workers=2)
+
+        # Assert
+        assert builds == [(dockerfile, "eval-harness-fixture-e1:latest")]
+
+    def test_rejects_eval_declaring_image_and_dockerfile(self, fake_runner, fake_eval_loading):
+        # Arrange
+        fake_eval_loading(image="existing:latest", dockerfile="fixtures/image/Dockerfile")
+        recorder = fake_runner([(1.0, 1.0)])
+        aee = _make_aee(["e1"])
+
+        # Act / Assert
+        with pytest.raises(ValueError, match="cannot declare both"):
+            run_agent(aee, Queue())
+        assert recorder.calls == []
+
+    def test_rejects_dockerfile_outside_eval_directory(
+        self, tmp_path, monkeypatch, fake_runner, fake_eval_loading
+    ):
+        # Arrange
+        eval_dir = tmp_path / "e1"
+        eval_dir.mkdir()
+        (eval_dir / "eval.py").write_text("# resolved separately from fake loading\n")
+        (tmp_path / "Dockerfile").write_text("FROM eval-harness:latest\n")
+        monkeypatch.setattr("src.evals_engine.settings.EVALS_DIRS", str(tmp_path))
+        fake_eval_loading(dockerfile="../Dockerfile")
+        recorder = fake_runner([(1.0, 1.0)])
+        aee = _make_aee(["e1"])
+
+        # Act / Assert
+        with pytest.raises(ValueError, match="must be inside"):
+            run_agent(aee, Queue())
+        assert recorder.calls == []
+
+    def test_rejects_absolute_eval_dockerfile_path(
+        self, tmp_path, monkeypatch, fake_runner, fake_eval_loading
+    ):
+        # Arrange
+        eval_dir = tmp_path / "e1"
+        image_dir = eval_dir / "fixtures" / "image"
+        image_dir.mkdir(parents=True)
+        (eval_dir / "eval.py").write_text("# resolved separately from fake loading\n")
+        dockerfile = image_dir / "Dockerfile"
+        dockerfile.write_text("FROM eval-harness:latest\n")
+        monkeypatch.setattr("src.evals_engine.settings.EVALS_DIRS", str(tmp_path))
+        fake_eval_loading(dockerfile=str(dockerfile))
+        recorder = fake_runner([(1.0, 1.0)])
+        aee = _make_aee(["e1"])
+
+        # Act / Assert
+        with pytest.raises(ValueError, match="must be relative"):
+            run_agent(aee, Queue())
+        assert recorder.calls == []
+
+    def test_reports_missing_eval_dockerfile(
+        self, tmp_path, monkeypatch, fake_runner, fake_eval_loading
+    ):
+        # Arrange
+        eval_dir = tmp_path / "e1"
+        eval_dir.mkdir()
+        (eval_dir / "eval.py").write_text("# resolved separately from fake loading\n")
+        monkeypatch.setattr("src.evals_engine.settings.EVALS_DIRS", str(tmp_path))
+        fake_eval_loading(dockerfile="fixtures/image/Dockerfile")
+        recorder = fake_runner([(1.0, 1.0)])
+        aee = _make_aee(["e1"])
+
+        # Act / Assert
+        with pytest.raises(FileNotFoundError, match="Dockerfile not found"):
+            run_agent(aee, Queue())
+        assert recorder.calls == []
 
 
 # --------------------------------------------------------------------------- #
@@ -754,7 +853,7 @@ class TestRunSessionHealthSplit:
         # comes back FAILED. Mirror run_agent's real contract: failed raises
         # (so _run_chain logs and swallows it), unhealthy returns cleanly with
         # the status already set (so _run_chain logs the 'skipped' line).
-        def _per_model_run_agent(aee, progress, run_dir=None, session_id=None):
+        def _per_model_run_agent(aee, progress, run_dir=None, session_id=None, image_resolver=None):
             model = aee.agent_config.agent_model
             aee.status = {
                 "ok-model": AgentEvalStatus.COMPLETED,

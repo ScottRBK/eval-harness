@@ -30,9 +30,12 @@ scoring logic. The eval contract is the `EvaluationFile` Protocol in
 directly by file path (`importlib.util.spec_from_file_location`) — the first root containing the
 eval wins, so user roots can shadow the bundled examples.
 
-`src/docker_runner.py:DockerRunner` handles container lifecycle and per-agent credential mounting. 
-New agents are added by implementing `_setup_<agent>` (returning an `AgentProvisioning` with either
-`environment` vars or staged `volumes`) and adding a case to `_provision_agent`.
+`src/docker_runner.py:DockerRunner` handles container lifecycle and per-agent credential mounting.
+An eval may select a prebuilt `image` or declare a relative `dockerfile`; fixture Dockerfiles are
+built once per session with their parent directory as the complete build context. Keep hidden eval
+artifacts outside that directory. New agents are added by implementing `_setup_<agent>`, returning
+an `AgentProvisioning` with either `environment` vars or staged `volumes`, and adding a case to
+`_provision_agent`.
 
 Before evals run, each agent/model is gated by a health check (`DockerRunner.health_check()` in
 `src/docker_runner.py`, wired into `run_agent` in `src/evals_engine.py`). An unhealthy probe sets

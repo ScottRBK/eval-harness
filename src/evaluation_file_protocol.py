@@ -16,6 +16,8 @@ shall be evaluated in the Score phase
 
 Important considerations for each evaluation file:
 - Any import statements must be lazy loaded inside the methods themselves
+- An eval may declare either `image` for a prebuilt image or `dockerfile` for a Dockerfile path
+  relative to the eval directory. If neither is declared, the harness uses its base image.
 - each stage can have key/value pairs passed to it using:
     - arrange_embedded_values, act_embedded_values, score_embedded_values
 

@@ -45,6 +45,9 @@ be plain literals. Module-level placeholders (e.g. `REPO_URL = ""`) keep linters
 never shipped to the container.
 1. Pi has no native MCP support. An eval that configures MCP (such as `encode_repo_forgetful`)
 cannot be run with Pi unless it is excluded from that run's agent/eval pairing.
+1. An eval may declare either `image` for a manually managed prebuilt image or `dockerfile` for a
+Dockerfile path relative to its eval directory. The Dockerfile's parent is the complete build
+context; keep hidden tests, answers and oracles outside it. Do not declare both attributes.
 
 ## Generating the evaluation
 1. Check whether the environment variable `EVAL_HARNESS_EVALS_DIRS` is set (if not, use the
@@ -56,6 +59,9 @@ is needed — the harness loads `eval.py` directly by file path)
 1. Generate the class with PascalCasing of the directory you created for the evaluation.
 1. Generate the three methods (arrange, act and score) and embedded values as outlined in the
 [architecture description](../../README.md#harness-architecture) for the class.
+1. If the eval needs additional system software, prefer an eval-owned
+`fixtures/image/Dockerfile` derived from `eval-harness:latest`. Put only agent-visible build files
+in that directory and set `dockerfile = "fixtures/image/Dockerfile"` on the eval class.
 1. Review the pattern explanations and then complete the necessary methods in the class.
 1. Agree with the user if it is okay to generate a .json file (do not overwrite the `evals.json`)
 for the evals configuration against a single agent configuration that they prefer to use for

@@ -105,6 +105,42 @@ lazy loaded into the phases method itself.
         from agent_shell.models.agent import AgentType, MCPServerSpec, MCPServerType
 ```
 
+### Eval-specific Docker images
+
+An eval can use an existing prebuilt image with the `image` class attribute:
+
+```python
+class ChessEngine:
+    image = "eval-harness-rust:latest"
+```
+
+Alternatively, an eval can carry its own Dockerfile and have the harness build it once per session:
+
+```text
+my_eval/
+├── eval.py
+└── fixtures/
+    ├── hidden_tests.py
+    └── image/
+        ├── Dockerfile
+        └── visible-starting-files/
+```
+
+```python
+class MyEval:
+    dockerfile = "fixtures/image/Dockerfile"
+```
+
+The Dockerfile path is relative to the eval directory. Its parent directory is the complete Docker
+build context, so everything in that directory must be safe for the agent to see. Keep hidden tests,
+answers and oracles outside it. Fixture Dockerfiles should derive from `eval-harness:latest` so the
+Python runtime, agent CLIs and harness execution tools remain available.
+
+`image` and `dockerfile` are mutually exclusive. If neither is declared, the harness uses
+`EVAL_HARNESS_BASE_IMAGE` (`eval-harness:latest` by default). Built fixture images use Docker's layer
+cache but are rebuilt once per harness session, so changes to their context or base image are picked
+up without a manual build command.
+
 ### Embedded Values 
 As well as scrapping the method it will also scrape any embedded values that need to injected into the 
 script at run time, such as for example a prompt file held within the `fixtures` directory of the 
