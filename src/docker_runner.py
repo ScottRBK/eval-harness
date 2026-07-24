@@ -21,6 +21,32 @@ _TOKEN_MARKER = "EVAL_TOTAL_TOKENS="
 CONFIG_ROOT = Path(__file__).parent / "docker" / "configs"
 
 
+def _log_build_events(events, log: logging.Logger, level: int) -> None:
+    for event in events:
+        message = event.get("stream") or event.get("error") or event.get("status") or ""
+        if message := message.strip():
+            log.log(level, "[docker build] %s", message)
+
+
+def build_image(dockerfile: Path, tag: str, log: logging.Logger) -> str:
+    """Build an eval-owned image using the Dockerfile's directory as its context."""
+    client = docker.from_env()
+    log.info("Building eval image %s from %s", tag, dockerfile)
+    try:
+        _image, build_log = client.images.build(
+            path=str(dockerfile.parent),
+            dockerfile=dockerfile.name,
+            tag=tag,
+            rm=True,
+            forcerm=True,
+        )
+    except docker.errors.BuildError as exc:
+        _log_build_events(exc.build_log, log, logging.ERROR)
+        raise
+    _log_build_events(build_log, log, logging.INFO)
+    return tag
+
+
 def _parse_total_tokens(buffer: str, log: logging.Logger) -> int:
     total_tokens = 0
     for line in buffer.splitlines():

@@ -35,6 +35,7 @@ list of the patterns and a brief description:
 |[New Feature with Automated Tests](docs/eval_patterns/new_feature.md)|Ask an agent to implement a new feature with prediefined API contract and run hidden automated tests after the agent has completed their work, it also demonstrates how you can make use of extrending the base docker image, in this example we add rustup to allow for the agent to use cargo to build and test in Rust|chess_engine|
 |[Test Authoring](docs/eval_patterns/test_authoring.md)|The inverse of the Bug Fix pattern: hand the agent the code with its test suite deleted and ask it to write one, then grade the suite by mutation testing - the harness applies small behavioural faults to the module and scores the fraction the agent's tests catch|inflection_test_writing|
 |[Scorer Authoring](docs/eval_patterns/eval_generator.md)|Ask an agent to write a scoring routine that discriminates a correct implementation of a small task from incorrect ones, without ever seeing the held-out solutions|eval_generator|
+|[Terminal Task](docs/eval_patterns/terminal_task.md)|Grade whether an agent leaves a realistic terminal environment in the required final state, outcome-only scoring against the live container state, using an eval-owned Dockerfile as the task environment|repair_nginx_service|
 
 # Getting Started
 
@@ -104,6 +105,42 @@ lazy loaded into the phases method itself.
         from agent_shell.shell import AgentShell 
         from agent_shell.models.agent import AgentType, MCPServerSpec, MCPServerType
 ```
+
+### Eval-specific Docker images
+
+An eval can use an existing prebuilt image with the `image` class attribute:
+
+```python
+class ChessEngine:
+    image = "eval-harness-rust:latest"
+```
+
+Alternatively, an eval can carry its own Dockerfile and have the harness build it once per session:
+
+```text
+my_eval/
+├── eval.py
+└── fixtures/
+    ├── hidden_tests.py
+    └── image/
+        ├── Dockerfile
+        └── visible-starting-files/
+```
+
+```python
+class MyEval:
+    dockerfile = "fixtures/image/Dockerfile"
+```
+
+The Dockerfile path is relative to the eval directory. Its parent directory is the complete Docker
+build context, so everything in that directory must be safe for the agent to see. Keep hidden tests,
+answers and oracles outside it. Fixture Dockerfiles should derive from `eval-harness:latest` so the
+Python runtime, agent CLIs and harness execution tools remain available.
+
+`image` and `dockerfile` are mutually exclusive. If neither is declared, the harness uses
+`EVAL_HARNESS_BASE_IMAGE` (`eval-harness:latest` by default). Built fixture images use Docker's layer
+cache but are rebuilt once per harness session, so changes to their context or base image are picked
+up without a manual build command.
 
 ### Embedded Values 
 As well as scrapping the method it will also scrape any embedded values that need to injected into the 

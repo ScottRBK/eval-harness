@@ -25,11 +25,15 @@ The second is running on a **custom Docker image**. A chess engine needs a Rust 
 eval runs on `eval-harness-rust:latest` rather than the default image.
 
 > [!TIP]
-> The image is selected by a single class attribute - `image = "eval-harness-rust:latest"` - which
-> the engine reads with a `getattr(eval_cls, "image", "eval-harness:latest")` fallback, so no
-> change to `evals.json` or the runner is needed to bring in a new toolchain. The rust image is just
-> `FROM eval-harness:latest` plus `rustup`, so you must build the base image **first** and then the
-> rust image - there is no auto-rebuild (see the build commands in [AGENTS](../../AGENTS.md)).
+> This example selects the manually managed image with
+> `image = "eval-harness-rust:latest"`. For a portable eval-owned image, place a Dockerfile and only
+> agent-visible build files under `fixtures/image/`, then declare
+> `dockerfile = "fixtures/image/Dockerfile"`. The harness builds that image once per session using
+> the Dockerfile's parent as its complete context. `image` and `dockerfile` are mutually exclusive.
+>
+> The rust image is `FROM eval-harness:latest` plus `rustup`, so the base image must be built first.
+> The same inheritance is required for fixture images so the harness runtime and agent CLIs remain
+> available.
 
 ```dockerfile
 from eval-harness:latest

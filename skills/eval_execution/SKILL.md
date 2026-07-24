@@ -14,11 +14,11 @@ follow the [eval interpretation skill](../eval_interpretation/SKILL.md).
 
 ## Pre-flight checks
 1. Dependencies are synced: `uv sync`.
-2. The docker images are built and current - the build commands are in
-   [AGENTS.md](../../AGENTS.md#commands). The base image must exist before the rust image is
-   built; the rust image is only needed by evals that declare
-   `image = "eval-harness-rust:latest"`. Rebuild manually after any Dockerfile or agent-shell
-   change - a stale image is the usual cause of zero-token results.
+2. The base Docker image is built and current - the build command is in
+   [AGENTS.md](../../AGENTS.md#commands). Manually managed images declared with `image` must also
+   exist. Evals declaring `dockerfile` are built automatically once per session, but their
+   Dockerfiles should derive from the current base image. Rebuild the base manually after its
+   Dockerfile or agent-shell changes; a stale base is a common cause of zero-token results.
 3. Credentials exist for **every** `agent_type` in the evaluation file - see the
    [authorisation guide](../../docs/authorisation.md). Evals that clone private repos also need
    the harness-level `GITHUB_TOKEN`.

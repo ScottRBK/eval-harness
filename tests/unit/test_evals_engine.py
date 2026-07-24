@@ -17,6 +17,7 @@ import os
 import threading
 import time
 from datetime import datetime
+from pathlib import Path
 from queue import Queue
 from types import SimpleNamespace
 from uuid import uuid4
@@ -26,6 +27,7 @@ import pytest
 from agent_shell.models.agent import AgentType, HealthCheckResult
 
 from src.config.settings import settings
+from src.evaluation_file_protocol import EvaluationFile
 from src.evals_engine import run_agent, run_session, _load_eval_class, _method_to_script
 from src.models import (
     AgentConfig,
@@ -176,10 +178,12 @@ def fake_eval_loading(monkeypatch):
 
     monkeypatch.setattr("src.evals_engine._method_to_script", _fake_method_to_script)
 
-    def _install(image=None):
+    def _install(image=None, dockerfile=None):
         mod = SimpleNamespace(arrange="ARRANGE", act="ACT", score="SCORE")
         if image is not None:
             mod.image = image
+        if dockerfile is not None:
+            mod.dockerfile = dockerfile
         monkeypatch.setattr("src.evals_engine._load_eval_class", lambda eval_dir: mod)
         return mod
 
@@ -217,7 +221,7 @@ def recording_run_agent(monkeypatch):
     lock = threading.Lock()
 
     def _install(hold=0.0, barrier=None, fail_models=()):
-        def _fake_run_agent(aee, progress, run_dir=None, session_id=None):
+        def _fake_run_agent(aee, progress, run_dir=None, session_id=None, image_resolver=None):
             group = aee.agent_config.processing_group
             model = aee.agent_config.agent_model
             with lock:
@@ -417,6 +421,103 @@ class TestRunAgent:
 
         # Assert
         assert recorder.calls[0].image == "eval-harness:latest"
+
+    def test_builds_fixture_image_once_for_parallel_agents(
+        self,
+        tmp_path,
+        monkeypatch,
+        fake_runner,
+        fake_eval_loading,
+    ):
+        # Arrange
+        image_dir = tmp_path / "e1" / "fixtures" / "image"
+        image_dir.mkdir(parents=True)
+        dockerfile = image_dir / "Dockerfile"
+        dockerfile.write_text("FROM eval-harness:latest\n")
+        (tmp_path / "e1" / "eval.py").write_text("# resolved separately from fake loading\n")
+        monkeypatch.setattr("src.evals_engine.settings.EVALS_DIRS", str(tmp_path))
+        fake_eval_loading(dockerfile="fixtures/image/Dockerfile")
+        fake_runner([(1.0, 1.0), (1.0, 1.0)])
+        builds = []
+
+        def _build_image(path, tag, log):
+            builds.append((path, tag))
+            return tag
+
+        monkeypatch.setattr("src.evals_engine.build_image", _build_image)
+        agents = [_make_aee(["e1"], agent_model=f"m{i}") for i in range(2)]
+
+        # Act
+        run_session(agents, on_update=lambda: None, max_workers=2)
+
+        # Assert
+        assert builds == [(dockerfile, "eval-harness-fixture-e1:latest")]
+
+    def test_rejects_eval_declaring_image_and_dockerfile(self, fake_runner, fake_eval_loading):
+        # Arrange
+        fake_eval_loading(image="existing:latest", dockerfile="fixtures/image/Dockerfile")
+        recorder = fake_runner([(1.0, 1.0)])
+        aee = _make_aee(["e1"])
+
+        # Act / Assert
+        with pytest.raises(ValueError, match="cannot declare both"):
+            run_agent(aee, Queue())
+        assert recorder.calls == []
+
+    def test_rejects_dockerfile_outside_eval_directory(
+        self, tmp_path, monkeypatch, fake_runner, fake_eval_loading
+    ):
+        # Arrange
+        eval_dir = tmp_path / "e1"
+        eval_dir.mkdir()
+        (eval_dir / "eval.py").write_text("# resolved separately from fake loading\n")
+        (tmp_path / "Dockerfile").write_text("FROM eval-harness:latest\n")
+        monkeypatch.setattr("src.evals_engine.settings.EVALS_DIRS", str(tmp_path))
+        fake_eval_loading(dockerfile="../Dockerfile")
+        recorder = fake_runner([(1.0, 1.0)])
+        aee = _make_aee(["e1"])
+
+        # Act / Assert
+        with pytest.raises(ValueError, match="must be inside"):
+            run_agent(aee, Queue())
+        assert recorder.calls == []
+
+    def test_rejects_absolute_eval_dockerfile_path(
+        self, tmp_path, monkeypatch, fake_runner, fake_eval_loading
+    ):
+        # Arrange
+        eval_dir = tmp_path / "e1"
+        image_dir = eval_dir / "fixtures" / "image"
+        image_dir.mkdir(parents=True)
+        (eval_dir / "eval.py").write_text("# resolved separately from fake loading\n")
+        dockerfile = image_dir / "Dockerfile"
+        dockerfile.write_text("FROM eval-harness:latest\n")
+        monkeypatch.setattr("src.evals_engine.settings.EVALS_DIRS", str(tmp_path))
+        fake_eval_loading(dockerfile=str(dockerfile))
+        recorder = fake_runner([(1.0, 1.0)])
+        aee = _make_aee(["e1"])
+
+        # Act / Assert
+        with pytest.raises(ValueError, match="must be relative"):
+            run_agent(aee, Queue())
+        assert recorder.calls == []
+
+    def test_reports_missing_eval_dockerfile(
+        self, tmp_path, monkeypatch, fake_runner, fake_eval_loading
+    ):
+        # Arrange
+        eval_dir = tmp_path / "e1"
+        eval_dir.mkdir()
+        (eval_dir / "eval.py").write_text("# resolved separately from fake loading\n")
+        monkeypatch.setattr("src.evals_engine.settings.EVALS_DIRS", str(tmp_path))
+        fake_eval_loading(dockerfile="fixtures/image/Dockerfile")
+        recorder = fake_runner([(1.0, 1.0)])
+        aee = _make_aee(["e1"])
+
+        # Act / Assert
+        with pytest.raises(FileNotFoundError, match="Dockerfile not found"):
+            run_agent(aee, Queue())
+        assert recorder.calls == []
 
 
 # --------------------------------------------------------------------------- #
@@ -754,7 +855,7 @@ class TestRunSessionHealthSplit:
         # comes back FAILED. Mirror run_agent's real contract: failed raises
         # (so _run_chain logs and swallows it), unhealthy returns cleanly with
         # the status already set (so _run_chain logs the 'skipped' line).
-        def _per_model_run_agent(aee, progress, run_dir=None, session_id=None):
+        def _per_model_run_agent(aee, progress, run_dir=None, session_id=None, image_resolver=None):
             model = aee.agent_config.agent_model
             aee.status = {
                 "ok-model": AgentEvalStatus.COMPLETED,
@@ -987,6 +1088,103 @@ class TestLoadEvalClass:
 
         # Assert
         assert "found-me" in script
+
+
+# --------------------------------------------------------------------------- #
+# F2. _load_eval_class — bundled example evals load and satisfy the protocol
+# --------------------------------------------------------------------------- #
+
+
+class TestBundledEvalsLoad:
+    """Guard against regressions in shipped example evals: each must load,
+    satisfy the EvaluationFile protocol, and have method bodies that
+    _method_to_script can extract."""
+
+    @pytest.mark.parametrize(
+        "eval_dir",
+        [
+            "repair_nginx_service",
+        ],
+    )
+    def test_bundled_eval_loads_and_satisfies_protocol(self, eval_dir, monkeypatch):
+        # Arrange — point at the repo's bundled example_evals
+        repo_root = Path(__file__).resolve().parents[2]
+        monkeypatch.setattr(settings, "EVALS_DIRS", str(repo_root / "example_evals"), raising=False)
+
+        # Act
+        cls = _load_eval_class(eval_dir)
+
+        # Assert
+        assert isinstance(cls, type)
+        assert issubclass(cls, EvaluationFile)
+        for phase in ("arrange", "act", "score"):
+            method = getattr(cls, phase)
+            script = _method_to_script(method)
+            assert "async def _main" in script
+
+    def test_repair_nginx_service_declares_dockerfile(self, monkeypatch):
+        # Arrange
+        repo_root = Path(__file__).resolve().parents[2]
+        monkeypatch.setattr(settings, "EVALS_DIRS", str(repo_root / "example_evals"), raising=False)
+
+        # Act
+        cls = _load_eval_class("repair_nginx_service")
+
+        # Assert
+        assert getattr(cls, "dockerfile", None) == "fixtures/image/Dockerfile"
+        assert getattr(cls, "image", None) is None
+
+    def test_repair_nginx_service_embeds_instruction_and_tests(self, monkeypatch):
+        # Arrange
+        repo_root = Path(__file__).resolve().parents[2]
+        monkeypatch.setattr(settings, "EVALS_DIRS", str(repo_root / "example_evals"), raising=False)
+
+        # Act
+        cls = _load_eval_class("repair_nginx_service")
+
+        # Assert — instruction is embedded for act, tests for score
+        assert "INSTRUCTION" in cls.act_embedded_values
+        instruction = cls.act_embedded_values["INSTRUCTION"]
+        assert "Nginx" in instruction
+        assert "TESTS" in cls.score_embedded_values
+        tests = cls.score_embedded_values["TESTS"]
+        assert "EVAL_SCORE" in tests
+
+        # Keep the required log path explicit on both sides of the eval contract.
+        access_log = "/var/log/nginx/access.log"
+        assert access_log in instruction
+        assert access_log in tests
+
+    def test_repair_nginx_service_hidden_tests_outside_build_context(self, monkeypatch):
+        # Arrange
+        repo_root = Path(__file__).resolve().parents[2]
+        eval_dir = repo_root / "example_evals" / "repair_nginx_service"
+        image_dir = eval_dir / "fixtures" / "image"
+        monkeypatch.setattr(settings, "EVALS_DIRS", str(repo_root / "example_evals"), raising=False)
+
+        # Act / Assert — tests.py and oracle.sh must not be in the build context
+        assert not (image_dir / "tests.py").exists()
+        assert not (image_dir / "oracle.sh").exists()
+        assert not (image_dir / "instruction.md").exists()
+
+    def test_repair_nginx_service_pipes_hidden_tests_to_python(self, monkeypatch):
+        # Arrange
+        repo_root = Path(__file__).resolve().parents[2]
+        monkeypatch.setattr(
+            settings,
+            "EVALS_DIRS",
+            str(repo_root / "example_evals"),
+            raising=False,
+        )
+        cls = _load_eval_class("repair_nginx_service")
+
+        # Act
+        script = _method_to_script(cls.score)
+
+        # Assert — no predictable agent-writable test file is created.
+        assert '["python", "-I", "-"]' in script
+        assert "input=TESTS" in script
+        assert "_eval_hidden_tests.py" not in script
 
 
 # --------------------------------------------------------------------------- #
