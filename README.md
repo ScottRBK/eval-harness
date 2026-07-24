@@ -35,6 +35,7 @@ list of the patterns and a brief description:
 |[New Feature with Automated Tests](docs/eval_patterns/new_feature.md)|Ask an agent to implement a new feature with prediefined API contract and run hidden automated tests after the agent has completed their work, it also demonstrates how you can make use of extrending the base docker image, in this example we add rustup to allow for the agent to use cargo to build and test in Rust|chess_engine|
 |[Test Authoring](docs/eval_patterns/test_authoring.md)|The inverse of the Bug Fix pattern: hand the agent the code with its test suite deleted and ask it to write one, then grade the suite by mutation testing - the harness applies small behavioural faults to the module and scores the fraction the agent's tests catch|inflection_test_writing|
 |[Scorer Authoring](docs/eval_patterns/eval_generator.md)|Ask an agent to write a scoring routine that discriminates a correct implementation of a small task from incorrect ones, without ever seeing the held-out solutions|eval_generator|
+|[Terminal Task](docs/eval_patterns/terminal_task.md)|Grade whether an agent leaves a realistic terminal environment in the required final state, outcome-only scoring against the live container state, using an eval-owned Dockerfile as the task environment|repair_nginx_service|
 
 # Getting Started
 

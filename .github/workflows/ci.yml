@@ -75,5 +75,12 @@ jobs:
       - name: Build Rust Docker image
         run: docker build -t eval-harness-rust:latest -f src/docker/rust/Dockerfile src/docker/
 
+      - name: Build repair_nginx_service fixture image
+        run: >-
+          docker build
+          -t eval-harness-fixture-repair_nginx_service:latest
+          -f example_evals/repair_nginx_service/fixtures/image/Dockerfile
+          example_evals/repair_nginx_service/fixtures/image/
+
       - name: Run integration tests
         run: uv run pytest -o addopts="--strict-markers" tests/integration -m integration

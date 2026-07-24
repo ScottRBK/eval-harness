@@ -17,6 +17,7 @@ import os
 import threading
 import time
 from datetime import datetime
+from pathlib import Path
 from queue import Queue
 from types import SimpleNamespace
 from uuid import uuid4
@@ -26,6 +27,7 @@ import pytest
 from agent_shell.models.agent import AgentType, HealthCheckResult
 
 from src.config.settings import settings
+from src.evaluation_file_protocol import EvaluationFile
 from src.evals_engine import run_agent, run_session, _load_eval_class, _method_to_script
 from src.models import (
     AgentConfig,
@@ -1086,6 +1088,103 @@ class TestLoadEvalClass:
 
         # Assert
         assert "found-me" in script
+
+
+# --------------------------------------------------------------------------- #
+# F2. _load_eval_class — bundled example evals load and satisfy the protocol
+# --------------------------------------------------------------------------- #
+
+
+class TestBundledEvalsLoad:
+    """Guard against regressions in shipped example evals: each must load,
+    satisfy the EvaluationFile protocol, and have method bodies that
+    _method_to_script can extract."""
+
+    @pytest.mark.parametrize(
+        "eval_dir",
+        [
+            "repair_nginx_service",
+        ],
+    )
+    def test_bundled_eval_loads_and_satisfies_protocol(self, eval_dir, monkeypatch):
+        # Arrange — point at the repo's bundled example_evals
+        repo_root = Path(__file__).resolve().parents[2]
+        monkeypatch.setattr(settings, "EVALS_DIRS", str(repo_root / "example_evals"), raising=False)
+
+        # Act
+        cls = _load_eval_class(eval_dir)
+
+        # Assert
+        assert isinstance(cls, type)
+        assert issubclass(cls, EvaluationFile)
+        for phase in ("arrange", "act", "score"):
+            method = getattr(cls, phase)
+            script = _method_to_script(method)
+            assert "async def _main" in script
+
+    def test_repair_nginx_service_declares_dockerfile(self, monkeypatch):
+        # Arrange
+        repo_root = Path(__file__).resolve().parents[2]
+        monkeypatch.setattr(settings, "EVALS_DIRS", str(repo_root / "example_evals"), raising=False)
+
+        # Act
+        cls = _load_eval_class("repair_nginx_service")
+
+        # Assert
+        assert getattr(cls, "dockerfile", None) == "fixtures/image/Dockerfile"
+        assert getattr(cls, "image", None) is None
+
+    def test_repair_nginx_service_embeds_instruction_and_tests(self, monkeypatch):
+        # Arrange
+        repo_root = Path(__file__).resolve().parents[2]
+        monkeypatch.setattr(settings, "EVALS_DIRS", str(repo_root / "example_evals"), raising=False)
+
+        # Act
+        cls = _load_eval_class("repair_nginx_service")
+
+        # Assert — instruction is embedded for act, tests for score
+        assert "INSTRUCTION" in cls.act_embedded_values
+        instruction = cls.act_embedded_values["INSTRUCTION"]
+        assert "Nginx" in instruction
+        assert "TESTS" in cls.score_embedded_values
+        tests = cls.score_embedded_values["TESTS"]
+        assert "EVAL_SCORE" in tests
+
+        # Keep the required log path explicit on both sides of the eval contract.
+        access_log = "/var/log/nginx/access.log"
+        assert access_log in instruction
+        assert access_log in tests
+
+    def test_repair_nginx_service_hidden_tests_outside_build_context(self, monkeypatch):
+        # Arrange
+        repo_root = Path(__file__).resolve().parents[2]
+        eval_dir = repo_root / "example_evals" / "repair_nginx_service"
+        image_dir = eval_dir / "fixtures" / "image"
+        monkeypatch.setattr(settings, "EVALS_DIRS", str(repo_root / "example_evals"), raising=False)
+
+        # Act / Assert — tests.py and oracle.sh must not be in the build context
+        assert not (image_dir / "tests.py").exists()
+        assert not (image_dir / "oracle.sh").exists()
+        assert not (image_dir / "instruction.md").exists()
+
+    def test_repair_nginx_service_pipes_hidden_tests_to_python(self, monkeypatch):
+        # Arrange
+        repo_root = Path(__file__).resolve().parents[2]
+        monkeypatch.setattr(
+            settings,
+            "EVALS_DIRS",
+            str(repo_root / "example_evals"),
+            raising=False,
+        )
+        cls = _load_eval_class("repair_nginx_service")
+
+        # Act
+        script = _method_to_script(cls.score)
+
+        # Assert — no predictable agent-writable test file is created.
+        assert '["python", "-I", "-"]' in script
+        assert "input=TESTS" in script
+        assert "_eval_hidden_tests.py" not in script
 
 
 # --------------------------------------------------------------------------- #
