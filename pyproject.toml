@@ -13,6 +13,7 @@ dependencies = [
     "pydantic>=2.13.3",
     "pydantic-settings>=2.14.0",
     "pytest>=9.1.1",
+    "readchar>=4.2.2",
     "rich>=15.0.0",
 ]
 

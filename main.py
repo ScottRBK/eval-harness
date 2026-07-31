@@ -12,7 +12,7 @@ from agent_shell.models.agent import AgentType
 from src.config.settings import settings
 from src.evals_engine import run_session
 from src.logging_config import configure_logging
-from src.tui import LiveStatus, print_introduction
+from src.tui.execution import LiveStatus, print_introduction
 from src.repositories.evaluation_results import (
     EvaluationResultsService,
     JsonEvaluationResultsRepository,
