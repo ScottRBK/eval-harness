@@ -54,6 +54,11 @@ print('codex provisioning visible')
 from pathlib import Path
 credentials = Path('/home/node/.pi/agent/auth.json')
 assert credentials.read_text() == '{"pi": true}'
+# Custom providers from the host model files must be visible so the
+# container's Pi can resolve LAN-hosted models (regression: only auth.json
+# was mounted, so ds4-bosgame/llama-ai-server reported "not found").
+assert Path('/home/node/.pi/agent/models.json').is_file()
+assert Path('/home/node/.pi/agent/models-store.json').is_file()
 print('pi provisioning visible')
 """,
     ),
@@ -96,6 +101,8 @@ def test_agent_provisioning_is_visible_inside_real_container(
     opencode_auth.parent.mkdir()
     codex_auth.write_text('{"codex": true}')
     pi_auth.write_text('{"pi": true}')
+    pi_auth.parent.joinpath("models.json").write_text('{"providers": {}}')
+    pi_auth.parent.joinpath("models-store.json").write_text('{"opencode-go": {}}')
     opencode_auth.write_text('{"opencode": true}')
     monkeypatch.setattr(
         "src.docker_runner.settings.CLAUDE_CODE_OAUTH_TOKEN",

@@ -1,12 +1,5 @@
 {
     "evals": [
-        { 
-            "number": 1,
-            "eval_dir": "encode_repo_forgetful",
-            "description": "encode a repo into forgetful and then query forgetful for facts regarding it",
-            "run_count": 3,
-            "tags": ["forgetful", "python"]
-        },
         {
             "number": 2,
             "eval_dir": "inflection_bug_fix",
@@ -41,45 +34,19 @@
             "description": "Have an agent write the score phase for an evaluation",
             "run_count": 3,
             "tags": ["python", "evals"]
+        }, 
+        {
+            "number": 7,
+            "eval_dir": "repair_nginx_service",
+            "description": "Have an agent attempt to repair a broken nginx service",
+            "run_count": 3,
+            "tags": ["terminal"]
         }
     ],
     "agents": [
-       {
-            "agent_type": "opencode",
-            "agent_model":"llama.cpp ai/qwen3.6-27b-8Q",
-            "processing_group": "ai-server"
-        },
         {
-            "agent_type": "claude_code",
-            "agent_model":"haiku"
-        },
-        {
-            "agent_type": "opencode",
-            "agent_model":"ds4 bosman/deepseek-v4-flash",
-            "processing_group": "bosman-server"
-        },
-        {
-            "agent_type": "claude_code",
-            "agent_model": "sonnet",
-            "effort": "high"
-        },
-        {
-            "agent_type": "claude_code",
-            "agent_model": "sonnet",
-            "effort": "medium"
-        },        
-        {
-            "agent_type": "claude_code",
-            "agent_model": "sonnet",
-            "effort": "low"
-        },
-        {
-            "agent_type": "opencode",
-            "agent_model": "opencode/big-pickle"
-        },
-        {
-            "agent_type": "codex",
-            "agent_model": "gpt-5.5"
+            "agent_type": "pi",
+            "agent_model": "ds4-bosgame/deepseek-v4-flash"
         }
     ]
 }

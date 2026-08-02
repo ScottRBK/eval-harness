@@ -110,7 +110,13 @@ class DockerRunner:
             raise RuntimeError(
                 f"Pi auth file not found at {auth} (run `pi` then `/login` on the host)"
             )
-        return AgentProvisioning(volumes=self._staged_mount([auth], "/home/node/.pi/agent"))
+        agent_dir = auth.parent
+        files = [auth]
+        for name in ("models.json", "models-store.json"):
+            candidate = agent_dir / name
+            if candidate.is_file():
+                files.append(candidate)
+        return AgentProvisioning(volumes=self._staged_mount(files, "/home/node/.pi/agent"))
 
     def _setup_copilot(self) -> AgentProvisioning:
         if not settings.COPILOT_GITHUB_TOKEN:
