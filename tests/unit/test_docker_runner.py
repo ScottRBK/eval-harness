@@ -318,7 +318,7 @@ class TestProvisionAgent:
         # Arrange — auth + custom provider model definitions next to it
         agent_dir = tmp_path / "pi"
         agent_dir.mkdir()
-        (agent_dir / "auth.json").write_text('{}')
+        (agent_dir / "auth.json").write_text("{}")
         (agent_dir / "models.json").write_text('{"providers": {}}')
         (agent_dir / "models-store.json").write_text('{"opencode-go": {}}')
         monkeypatch.setattr(
