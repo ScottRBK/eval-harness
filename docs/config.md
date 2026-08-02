@@ -14,7 +14,7 @@ prefixed with `EVAL_HARNESS_`
 |`CLAUDE_CODE_OAUTH_TOKEN`|string|OAuth token to use with the claude code, obtained by typing `claude setup-token`||
 |`OPENCODE_CREDENTIALS_LOC`|string|Path to the OpenCode `auth.json`; it is copied and mounted into the container for OpenCode agents|`~/.local/share/opencode/auth.json`|
 |`CODEX_CREDENTIALS_LOC`|string|Path to the Codex `auth.json` (from `codex login`); a throwaway copy is mounted into the container so Codex can refresh the token without touching the host file|`~/.codex/auth.json`|
-|`PI_CREDENTIALS_LOC`|string|Path to Pi's `auth.json`; it is copied and mounted into the container for Pi agents|`~/.pi/agent/auth.json`|
+|`PI_CREDENTIALS_LOC`|string|Path to Pi's `auth.json`; it is copied and mounted into the container for Pi agents, along with sibling `models.json`/`models-store.json` when present (custom providers defined on the host are visible inside the container)|`~/.pi/agent/auth.json`|
 |`COPILOT_GITHUB_TOKEN`|string|GitHub token for the Copilot CLI agent, passed to the container as an environment variable. See [authorisation](authorisation.md) for the required permissions||
 |`GITHUB_TOKEN`|string|Harness-level GitHub token for cloning private repos inside the container. Injected as `GH_TOKEN`; unset means public-repo clones only. See [authorisation](authorisation.md#private-repositories-harness-level-github-token)||
 |`AZURE_DEVOPS_PAT`|string|Harness-level Azure DevOps PAT for cloning private Azure DevOps repos inside the container. Injected as `ADO_PAT`; unset means clones rely on existing container git credentials||

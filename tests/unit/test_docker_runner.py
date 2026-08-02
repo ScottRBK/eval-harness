@@ -314,6 +314,50 @@ class TestProvisionAgent:
         binds = {spec["bind"] for spec in prov.volumes.values()}
         assert "/home/node/.pi/agent" in binds
 
+    def test_pi_mounts_model_files_alongside_auth(self, tmp_path, monkeypatch):
+        # Arrange — auth + custom provider model definitions next to it
+        agent_dir = tmp_path / "pi"
+        agent_dir.mkdir()
+        (agent_dir / "auth.json").write_text('{}')
+        (agent_dir / "models.json").write_text('{"providers": {}}')
+        (agent_dir / "models-store.json").write_text('{"opencode-go": {}}')
+        monkeypatch.setattr(
+            "src.docker_runner.settings.PI_CREDENTIALS_LOC",
+            str(agent_dir / "auth.json"),
+        )
+        runner = DockerRunner(AgentType.PI, "model")
+
+        # Act
+        prov = runner._provision_agent()
+
+        # Assert — all three files staged into the single Pi bind mount so the
+        # container Pi can resolve custom providers (regression: only auth.json
+        # was mounted, so LAN models were reported "not found")
+        assert prov.environment == {}
+        assert len(prov.volumes) == 1
+        staging = Path(next(iter(prov.volumes)))
+        assert (staging / "auth.json").is_file()
+        assert (staging / "models.json").is_file()
+        assert (staging / "models-store.json").is_file()
+        assert next(iter(prov.volumes.values())) == {
+            "bind": "/home/node/.pi/agent",
+            "mode": "rw",
+        }
+
+    def test_pi_without_model_files_still_provisions_auth(self, pi_creds):
+        # Arrange — host has only auth.json (no custom providers)
+        runner = DockerRunner(AgentType.PI, "model")
+
+        # Act
+        prov = runner._provision_agent()
+
+        # Assert — still provisions; model files are optional, not required
+        assert prov.environment == {}
+        staging = Path(next(iter(prov.volumes)))
+        assert (staging / "auth.json").is_file()
+        assert not (staging / "models.json").exists()
+        assert not (staging / "models-store.json").exists()
+
     def test_pi_without_auth_file_raises(self, tmp_path, monkeypatch):
         # Arrange — point at a path that does not exist
         monkeypatch.setattr(
