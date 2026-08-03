@@ -91,7 +91,7 @@ def run_agent(
     image_resolver: EvalImageResolver | None = None,
 ):
 
-    log = logger  # fallback so the except block always has a valid logger
+    log = logger  
 
     try:
         log = agent_logger(aee.agent_config, run_dir) if run_dir else logger

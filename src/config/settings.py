@@ -21,6 +21,7 @@ class Settings(BaseSettings):
 
     ### Evaluation Run Configuration ###
     EVALS_DIRS: str = "example_evals"  # os.pathsep-separated eval roots, searched in order
+    EVAL_CONFIG_DIR: str = "eval_configs"
     BASE_IMAGE: str = "eval-harness:latest"
     MAX_AGENT_CONCURRENCY: int = 4
     HEALTH_CHECK_TIMEOUT_SECONDS: int = 3 * 60

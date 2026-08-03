@@ -1,4 +1,5 @@
 import time
+from pathlib import Path
 from uuid import uuid4
 
 from rich import print, box
@@ -7,6 +8,8 @@ from rich.table import Table
 from rich.spinner import Spinner
 from rich.panel import Panel
 from rich.text import Text
+from rich.console import Console 
+from blessed import Terminal
 
 from src.models import (
     AgentConfig,
@@ -15,6 +18,9 @@ from src.models import (
     EvalExecution,
     AgentEvalStatus,
 )
+from src.config.settings import Settings, settings 
+from src.helpers.tui import wait_for_selection
+
 from .styles import PALETTE, STATUS_STYLES
 
 def print_introduction(fields: dict[str, str]):
@@ -35,6 +41,59 @@ def print_introduction(fields: dict[str, str]):
         )
     )
 
+
+class Execution():
+    def __init__(self, terminal: Terminal, console: Console, app_settings: Settings = settings):
+        self._terminal = terminal
+        self._console = console
+        self._settings = app_settings 
+        self._eval_configs = self._load_eval_configs(eval_config=self._settings.EVAL_CONFIG_DIR)
+
+    def _load_eval_configs(self, eval_config: str) -> list[Path]: 
+        config_dir = Path(eval_config)
+
+        if not config_dir.is_dir():
+            raise ValueError(f"""Invalid evaluation configs directory (env EVAL_HARNESS_EVAL_CONFIG_DIR)
+                             {eval_config} is not a directory""")
+
+        return sorted(config_dir.glob("*.json"))
+
+    def _print_header(self): 
+        print(
+                Panel(
+                    "Select a configuration file to begin an evaluation",
+                    title=Text("AGENT EVAL HARNESS", style=f"bold {PALETTE['accent']}"),
+                    subtitle=Text("Select config", style=f"dim {PALETTE['label']}"),
+                    box=box.ROUNDED,
+                    border_style=PALETTE["border"],
+                    padding=(1, 3),
+                )
+            )      
+
+    def _invoke_eval_run(self, eval_config: Path):
+        pass
+
+    def _print_eval_configs(self, selected_idx: int = 0):
+        self._console.clear()
+        self._print_header()        
+        for idx, config in enumerate(self._eval_configs): 
+            if idx == selected_idx:
+                self._console.print(f"> {config}", style=PALETTE['value'])
+            else:
+                self._console.print(f" {config}", style=PALETTE['label'])
+
+
+    def select_eval_config(self):
+        selected_idx = wait_for_selection(
+            terminal=self._terminal,
+            options_count=len(self._eval_configs),
+            render=self._print_eval_configs, 
+        )
+        if selected_idx is None:
+            return None
+
+        selected_config = self._eval_configs[selected_idx]
+        print(selected_config)
 
 class LiveStatus:
     def __init__(self, agent_eval_execs: list[AgentEvalExecution]):
