@@ -9,7 +9,11 @@ from src.models import AgentEvalStatus, ResultFormat
 
 
 @pytest.fixture
-def eval_config(tmp_path: Path) -> Path:
+def eval_config(monkeypatch, tmp_path: Path) -> Path:
+    monkeypatch.setattr(
+        "src.evals_engine.settings.EVALS_DIRS",
+        str(Path(__file__).resolve().parents[2] / "example_evals"),
+    )
     config = tmp_path / "evals.json"
     config.write_text(
         json.dumps(
@@ -17,7 +21,7 @@ def eval_config(tmp_path: Path) -> Path:
                 "evals": [
                     {
                         "number": 1,
-                        "eval_dir": "test_eval",
+                        "eval_dir": "basic_eval",
                         "description": "test evaluation",
                         "run_count": 1,
                         "tags": [],
