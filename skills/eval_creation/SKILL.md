@@ -64,9 +64,12 @@ is needed — the harness loads `eval.py` directly by file path)
 `fixtures/image/Dockerfile` derived from `eval-harness:latest`. Put only agent-visible build files
 in that directory and set `dockerfile = "fixtures/image/Dockerfile"` on the eval class.
 1. Review the pattern explanations and then complete the necessary methods in the class.
-1. Agree with the user if it is okay to generate a .json file (do not overwrite the `evals.json`)
-for the evals configuration against a single agent configuration that they prefer to use for
-cheap/free inference that they may have access to.
+1. Before generating an eval configuration, ask the user how they want to manage it:
+   - create an ignored local file under `eval_configs/` with the `.local.json` suffix, or
+   - create/use a separate configuration directory that they can commit and select with
+     `EVAL_HARNESS_EVAL_CONFIG_DIR`.
+   Do not modify the tracked example configuration files. If the user chooses a separate
+   directory, confirm its path before writing the configuration there.
 1. Once the eval file has been generated, run it following the
 [eval execution skill](../eval_execution/), which covers the pre-flight checks and launch command.
 1. Monitor the evaluation run using the [eval interpretation skill](../eval_interpretation/) and fix

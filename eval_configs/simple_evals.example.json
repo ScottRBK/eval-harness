@@ -1,28 +1,24 @@
 {
     "evals": [
-       {
+        {
             "number": 1,
-            "eval_dir": "repair_nginx_service",
-            "description": "an example eval for repairing an ngix service in a container",
+            "eval_dir": "inflection_bug_fix",
+            "description": "bug fixes in the python string transformation lib named inflection",
             "run_count": 1,
-            "tags": ["container", "bugs"]
+            "tags": ["python", "bugs"]
         },
         {
-            "number": 3,
+            "number": 2,
             "eval_dir": "saleor_spree_mapping",
             "description": "create a canonical mapping between the saleor and spree solutions",
-            "run_count": 2,
+            "run_count": 1,
             "tags": ["mapping", "python", "ruby"]
         }
     ],
     "agents": [
         {
-            "agent_type": "codex",
-            "agent_model": "gpt-5.4-mini"
-        },
-        {
             "agent_type": "copilot_cli",
-            "agent_model": "gpt-5-mini"
+            "agent_model": "gpt-5.4-mini"
         }
     ]
 }

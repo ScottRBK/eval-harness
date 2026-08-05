@@ -5,24 +5,42 @@ import keyword
 import os
 import sys
 import textwrap
+import signal
 import logging
+import docker
+import json
+
 from pathlib import Path
 from queue import Queue, Empty
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
+from agent_shell.models.agent import AgentType
 
-from src.models import AgentEvalExecution, AgentEvalStatus
+from src.models import (
+    AgentConfig,
+    AgentEvalExecution,
+    AgentEvalStatus,
+    Eval,
+    EvalExecution,
+    EvalSession,
+    ResultFormat,
+)
 from src.docker_runner import DockerRunner, build_image
-from src.logging_config import agent_logger
+from src.logging_config import agent_logger, configure_logging
 from src.helpers.naming import safe_name
 from src.config.settings import settings
 from src.evaluation_file_protocol import EvaluationFile
-
+from src.repositories.evaluation_results import (
+    EvaluationResultsService,
+    JsonEvaluationResultsRepository,
+    CsvEvaluationResultsRepository,
+)
 
 logger = logging.getLogger(__name__)
+_SESSION_LABEL = "com.eval-harness.session"
 
 
 class EvalImageResolver:
@@ -83,6 +101,303 @@ if _EvalHarnessAgentShell is not None:
 """
 
 
+def _cleanup_eval_containers(signum, frame):
+    """Kill all eval harness containers on SIGINT/SIGTERM."""
+    try:
+        client = docker.from_env()
+        for container in client.containers.list(filters={"label": _SESSION_LABEL}, all=True):
+            container.remove(force=True)
+            logger.info(f"Cleaned up container {container.name}")
+    except Exception as e:
+        logger.error(f"Container cleanup failed: {e}")
+    raise KeyboardInterrupt()
+
+
+def get_results_filename(result_format: ResultFormat) -> str:
+    match result_format:
+        case ResultFormat.JSON:
+            return settings.RESULTS_FILENAME
+        case ResultFormat.CSV:
+            return settings.CSV_RESULTS_FILENAME
+        case _:
+            raise ValueError("Result Format has not been implemented yet")
+
+
+def get_results_service(result_format: ResultFormat, run_dir: Path) -> EvaluationResultsService:
+    match result_format:
+        case ResultFormat.JSON:
+            return EvaluationResultsService(
+                results_repo=JsonEvaluationResultsRepository(run_dir=run_dir)
+            )
+        case ResultFormat.CSV:
+            return EvaluationResultsService(
+                results_repo=CsvEvaluationResultsRepository(run_dir=run_dir)
+            )
+        case _:
+            raise ValueError("Result Format has not been implemented yet")
+
+
+_CONFIG_KEYS = {"evals", "agents"}
+_EVAL_KEYS = {"number", "eval_dir", "description", "run_count", "tags"}
+_AGENT_KEYS = {"agent_type", "agent_model", "effort", "processing_group"}
+
+
+def _configuration_error(eval_file: Path, location: str, message: str) -> ValueError:
+    return ValueError(f"Invalid evaluation configuration {eval_file}: {location} {message}")
+
+
+def _validate_mapping(
+    value: object,
+    *,
+    eval_file: Path,
+    location: str,
+    required: set[str],
+    allowed: set[str],
+) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise _configuration_error(eval_file, location, "must be an object")
+
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        fields = ", ".join(repr(field) for field in unknown)
+        raise _configuration_error(eval_file, location, f"contains unknown field(s): {fields}")
+
+    missing = sorted(required - set(value))
+    if missing:
+        field = missing[0]
+        raise _configuration_error(eval_file, location, f"missing required field {field!r}")
+
+    return value
+
+
+def _validate_non_empty_list(
+    value: object,
+    *,
+    eval_file: Path,
+    location: str,
+) -> list[object]:
+    if not isinstance(value, list):
+        raise _configuration_error(eval_file, location, "must be a list")
+    if not value:
+        raise _configuration_error(eval_file, location, "must not be empty")
+    return value
+
+
+def _validate_string(
+    value: object,
+    *,
+    eval_file: Path,
+    location: str,
+    allow_empty: bool = False,
+) -> str:
+    if not isinstance(value, str) or (not allow_empty and not value.strip()):
+        qualifier = "" if allow_empty else " non-empty"
+        raise _configuration_error(eval_file, location, f"must be a{qualifier} string")
+    return value
+
+
+def _validate_positive_integer(value: object, *, eval_file: Path, location: str) -> int:
+    if type(value) is not int or value < 1:
+        raise _configuration_error(eval_file, location, "must be a positive integer")
+    return value
+
+
+def _validate_optional_string(
+    value: object,
+    *,
+    eval_file: Path,
+    location: str,
+) -> str | None:
+    if value is not None and not isinstance(value, str):
+        raise _configuration_error(eval_file, location, "must be a string or null")
+    return value or None
+
+
+def _load_eval_config(eval_file: Path) -> tuple[list[Eval], list[AgentConfig]]:
+    try:
+        raw = json.loads(eval_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise _configuration_error(eval_file, "file", f"contains invalid JSON: {exc.msg}") from exc
+
+    config = _validate_mapping(
+        raw,
+        eval_file=eval_file,
+        location="root",
+        required=_CONFIG_KEYS,
+        allowed=_CONFIG_KEYS,
+    )
+    raw_evals = _validate_non_empty_list(
+        config["evals"],
+        eval_file=eval_file,
+        location="evals",
+    )
+    raw_agents = _validate_non_empty_list(
+        config["agents"],
+        eval_file=eval_file,
+        location="agents",
+    )
+
+    evals = []
+    for index, raw_eval in enumerate(raw_evals):
+        location = f"evals[{index}]"
+        data = _validate_mapping(
+            raw_eval,
+            eval_file=eval_file,
+            location=location,
+            required=_EVAL_KEYS,
+            allowed=_EVAL_KEYS,
+        )
+        number = _validate_positive_integer(
+            data["number"], eval_file=eval_file, location=f"{location}.number"
+        )
+        eval_dir = _validate_string(
+            data["eval_dir"], eval_file=eval_file, location=f"{location}.eval_dir"
+        )
+        description = _validate_string(
+            data["description"],
+            eval_file=eval_file,
+            location=f"{location}.description",
+            allow_empty=True,
+        )
+        run_count = _validate_positive_integer(
+            data["run_count"], eval_file=eval_file, location=f"{location}.run_count"
+        )
+        tags = data["tags"]
+        if not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags):
+            raise _configuration_error(
+                eval_file,
+                f"{location}.tags",
+                "must be a list of strings",
+            )
+        try:
+            _resolve_eval_file(eval_dir)
+        except FileNotFoundError as exc:
+            raise _configuration_error(
+                eval_file,
+                f"{location}.eval_dir",
+                f"{eval_dir!r} was not found in the configured evaluation directories",
+            ) from exc
+        evals.append(
+            Eval(
+                number=number,
+                eval_dir=eval_dir,
+                description=description,
+                run_count=run_count,
+                tags=tags,
+            )
+        )
+
+    agents = []
+    for index, raw_agent in enumerate(raw_agents):
+        location = f"agents[{index}]"
+        data = _validate_mapping(
+            raw_agent,
+            eval_file=eval_file,
+            location=location,
+            required={"agent_type", "agent_model"},
+            allowed=_AGENT_KEYS,
+        )
+        agent_type_value = _validate_string(
+            data["agent_type"],
+            eval_file=eval_file,
+            location=f"{location}.agent_type",
+        )
+        try:
+            agent_type = AgentType(agent_type_value)
+        except ValueError as exc:
+            valid_types = ", ".join(agent.value for agent in AgentType)
+            raise _configuration_error(
+                eval_file,
+                f"{location}.agent_type",
+                f"must be one of: {valid_types}",
+            ) from exc
+        agent_model = _validate_string(
+            data["agent_model"],
+            eval_file=eval_file,
+            location=f"{location}.agent_model",
+        )
+        effort = _validate_optional_string(
+            data.get("effort"),
+            eval_file=eval_file,
+            location=f"{location}.effort",
+        )
+        processing_group = _validate_optional_string(
+            data.get("processing_group"),
+            eval_file=eval_file,
+            location=f"{location}.processing_group",
+        )
+        agents.append(
+            AgentConfig(
+                agent_type=agent_type,
+                agent_model=agent_model,
+                effort=effort,
+                processing_group=processing_group,
+            )
+        )
+
+    return evals, agents
+
+
+def build_eval_session(
+    eval_file: Path,
+    result_format: ResultFormat,
+) -> EvalSession:
+    session_id = uuid4()
+    evals, agents = _load_eval_config(eval_file)
+
+    return EvalSession(
+        session_id=session_id,
+        evals=evals,
+        agents=agents,
+        eval_file=str(eval_file),
+        result_format=result_format,
+        run_dir=Path(settings.OUTPUT_DIR) / f"{datetime.now():%Y%m%d_%H%M%S}_{session_id}",
+    )
+
+
+def build_agent_eval_executions(eval_session: EvalSession) -> list[AgentEvalExecution]:
+
+    evals = eval_session.evals
+    agents = eval_session.agents
+    return [
+        AgentEvalExecution(
+            agent_config=agent,
+            total_score=0,
+            total_tokens=0,
+            total_time_taken_seconds=0,
+            evals_executions=[EvalExecution(id=uuid4(), eval=e, agent_config=agent) for e in evals],
+            status=AgentEvalStatus.PENDING,
+        )
+        for agent in agents
+    ]
+
+
+def _noop_update() -> None:
+    pass
+
+
+def run_evals(
+    eval_session: EvalSession,
+    agent_eval_executions: list[AgentEvalExecution],
+    eval_file: Path,
+    on_update: Callable[[], None] | None = None,
+) -> list[AgentEvalExecution]:
+
+    with configure_logging(eval_session.run_dir) as run_dir:
+        logger.info(f"Session {eval_session.session_id} starting")
+
+        signal.signal(signal.SIGINT, _cleanup_eval_containers)
+        signal.signal(signal.SIGTERM, _cleanup_eval_containers)
+        logger.info("Beginging Evaluation Run")
+        return run_session(
+            agent_eval_executions=agent_eval_executions,
+            on_update=_noop_update if on_update is None else on_update,
+            max_workers=settings.MAX_AGENT_CONCURRENCY,
+            run_dir=run_dir,
+            session_id=eval_session.session_id,
+        )
+
+
 def run_agent(
     aee: AgentEvalExecution,
     progress: Queue,
@@ -91,7 +406,7 @@ def run_agent(
     image_resolver: EvalImageResolver | None = None,
 ):
 
-    log = logger  # fallback so the except block always has a valid logger
+    log = logger
 
     try:
         log = agent_logger(aee.agent_config, run_dir) if run_dir else logger

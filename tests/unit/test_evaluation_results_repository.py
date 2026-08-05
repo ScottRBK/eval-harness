@@ -13,7 +13,7 @@ from uuid import UUID
 
 from agent_shell.models.agent import AgentType
 
-from main import _get_results_service
+from src.evals_engine import get_results_service
 from src.models import (
     AgentConfig,
     AgentEvalExecution,
@@ -464,7 +464,7 @@ class TestEvaluationResultsService:
 class TestGetResultsService:
     def test_maps_json_format_to_json_repository(self, tmp_path):
         # Arrange
-        service = _get_results_service(ResultFormat.JSON, tmp_path)
+        service = get_results_service(ResultFormat.JSON, tmp_path)
 
         # Act
         service.export([_agent_eval_execution()])
@@ -474,7 +474,7 @@ class TestGetResultsService:
 
     def test_maps_csv_format_to_csv_repository(self, tmp_path):
         # Arrange
-        service = _get_results_service(ResultFormat.CSV, tmp_path)
+        service = get_results_service(ResultFormat.CSV, tmp_path)
 
         # Act
         service.export([_agent_eval_execution()])

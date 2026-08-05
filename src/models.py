@@ -1,3 +1,4 @@
+from pathlib import Path
 from dataclasses import dataclass, field
 from enum import StrEnum
 from agent_shell.models.agent import AgentType
@@ -74,6 +75,9 @@ class EvalSession:
     session_id: UUID
     evals: list[Eval]
     agents: list[AgentConfig]
+    result_format: ResultFormat
+    eval_file: str
+    run_dir: Path
 
 
 @dataclass

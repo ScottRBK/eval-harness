@@ -8,12 +8,12 @@ license-files = ["LICENSE"]
 requires-python = ">=3.13"
 dependencies = [
     "agent-shell-py>=0.1.16",
+    "blessed>=1.47.0",
     "docker>=7.1.0",
     "dotenv>=0.9.9",
     "pydantic>=2.13.3",
     "pydantic-settings>=2.14.0",
     "pytest>=9.1.1",
-    "readchar>=4.2.2",
     "rich>=15.0.0",
 ]
 

@@ -25,13 +25,28 @@ prefixed with `EVAL_HARNESS_`
 |`DOCKER_LOG_LEVEL`|string|Level for the `docker` library logger, which is noisy at `INFO`|`WARNING`|
 |`URLLIB3_LOG_LEVEL`|string|Level for the `urllib3` logger, which is noisy at `INFO`|`WARNING`|
 |`EVALS_DIRS`|string|os.pathsep-separated list of directories searched, in order, for evals; each eval is `<dir>/<eval_dir>/eval.py`. Directories may live outside the repo and the first match wins (`:` on Linux/macOS, `;` on Windows)|`example_evals`|
+|`EVAL_CONFIG_DIR`|string|Directory of JSON evaluation configuration files listed by the interactive TUI|`eval_configs`|
 |`MAX_AGENT_CONCURRENCY`|int|Maximum number of processing chains run in parallel. An ungrouped agent is its own chain; each processing group is a single chain|`4`|
 |`ARRANGE_TIMEOUT_SECONDS`|int|Timeout for the arrange phase of each eval, in seconds|`3600`|
 |`ACT_TIMEOUT_SECONDS`|int|Timeout for the act phase of each eval, in seconds|`3600`|
 |`SCORE_TIMEOUT_SECONDS`|int|Timeout for the score phase of each eval, in seconds|`600`|
 
 ## Evaluation Configuration
-All evaluation configuration comes from an evaluation file. See an example in [eval.json](../evals.json).
+All evaluation configuration comes from a JSON evaluation file. The repository includes
+[`evals.example.json`](../eval_configs/evals.example.json), which contains every evaluation
+under `example_evals`, and [`simple_evals.example.json`](../eval_configs/simple_evals.example.json),
+which contains two evaluations and one agent. The full example places its two agents in the
+same `processing_group` to demonstrate serial execution for agents sharing a backend.
+
+The interactive TUI lists JSON files from `EVAL_CONFIG_DIR`. Choose one of two approaches
+for configurations you create:
+
+- Copy an example to `eval_configs/<name>.local.json` for an ignored local configuration.
+- Store the configuration in a separate directory if it should be committed, and set
+  `EVAL_HARNESS_EVAL_CONFIG_DIR` to that directory before starting the TUI.
+
+Headless runs require a configuration file to be supplied with `--eval_file`.
+
 An evaluation file contains two lists - `evals` and `agents`
 
 ### Evals Configuration 
@@ -90,19 +105,34 @@ OpenCode providers and models are defined in `src/docker/configs/opencode/openco
 Pi has no native MCP support, so do not include it in an evaluation that uses MCP, such as
 `encode_repo_forgetful`.
 
-### Specifying Evaluation File
-You can specify an evaluation file when you run the application using:
-
-```bash 
-uv run main.py -ef <path to evaluation file>
-```
-
-### Specifying Results output
-The results output file will by default be in JSON, however if you would prefer to output in CSV:
+### Running with the TUI
+Start the application without arguments to open the interactive menu:
 
 ```bash
-uv run main.py -rf csv
+uv run main.py
 ```
+
+Choose **Execute Evaluations**, then select one of the JSON configuration files from
+`EVAL_CONFIG_DIR`.
+
+### Running headlessly
+Pass the configuration file explicitly with `--run_eval`:
+
+```bash
+uv run main.py --run_eval --eval_file eval_configs/simple_evals.example.json
+```
+
+### Specifying Results Output
+Headless runs write JSON results by default. To write CSV results instead:
+
+```bash
+uv run main.py \
+  --run_eval \
+  --eval_file eval_configs/simple_evals.example.json \
+  --results_format csv
+```
+
+The current TUI execution path writes JSON results.
 
 
 

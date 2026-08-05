@@ -1,4 +1,6 @@
 import time
+import logging
+from pathlib import Path
 from uuid import uuid4
 
 from rich import print, box
@@ -7,6 +9,8 @@ from rich.table import Table
 from rich.spinner import Spinner
 from rich.panel import Panel
 from rich.text import Text
+from rich.console import Console
+from blessed import Terminal
 
 from src.models import (
     AgentConfig,
@@ -14,8 +18,20 @@ from src.models import (
     AgentEvalExecution,
     EvalExecution,
     AgentEvalStatus,
+    ResultFormat,
+    EvalSession,
+)
+from src.config.settings import Settings, settings
+from src.helpers.tui import wait_for_selection
+from src.evals_engine import (
+    get_results_filename,
+    run_evals,
+    build_eval_session,
+    build_agent_eval_executions,
+    get_results_service,
 )
 from .styles import PALETTE, STATUS_STYLES
+
 
 def print_introduction(fields: dict[str, str]):
     grid = Table.grid(padding=(0, 2))
@@ -34,6 +50,103 @@ def print_introduction(fields: dict[str, str]):
             padding=(1, 3),
         )
     )
+
+
+class Execution:
+    def __init__(self, terminal: Terminal, console: Console, app_settings: Settings = settings):
+        self._terminal = terminal
+        self._console = console
+        self._settings = app_settings
+        self._eval_configs = self._load_eval_configs(eval_config=self._settings.EVAL_CONFIG_DIR)
+
+    def _load_eval_configs(self, eval_config: str) -> list[Path]:
+        config_dir = Path(eval_config)
+
+        if not config_dir.is_dir():
+            raise ValueError(f"""Invalid evaluation configs directory (env EVAL_HARNESS_EVAL_CONFIG_DIR)
+                             {eval_config} is not a directory""")
+
+        return sorted(config_dir.glob("*.json"))
+
+    def _print_header(self):
+        print(
+            Panel(
+                "Select a configuration file to begin an evaluation",
+                title=Text("AGENT EVAL HARNESS", style=f"bold {PALETTE['accent']}"),
+                subtitle=Text("Select config", style=f"dim {PALETTE['label']}"),
+                box=box.ROUNDED,
+                border_style=PALETTE["border"],
+                padding=(1, 3),
+            )
+        )
+
+    def _print_eval_configs(self, selected_idx: int = 0):
+        self._console.clear()
+        self._print_header()
+        for idx, config in enumerate(self._eval_configs):
+            if idx == selected_idx:
+                self._console.print(f"> {config}", style=PALETTE["value"])
+            else:
+                self._console.print(f" {config}", style=PALETTE["label"])
+
+    def handle_eval_start(self, eval_session: EvalSession):
+        print_introduction(
+            {
+                "Session ID": str(eval_session.session_id),
+                "Output Directory": str(eval_session.run_dir),
+                "Evals": eval_session.eval_file,
+                "Results": eval_session.result_format,
+            }
+        )
+
+    def select_eval_config(self):
+        if not self._eval_configs:
+            self._console.print("No evaluation configuration files found", style=PALETTE["label"])
+            return None
+
+        selected_idx = wait_for_selection(
+            terminal=self._terminal,
+            options_count=len(self._eval_configs),
+            render=self._print_eval_configs,
+        )
+        if selected_idx is None:
+            return None
+
+        selected_config = self._eval_configs[selected_idx]
+        path_eval_config = Path(selected_config)
+        result_format = ResultFormat.JSON  # TODO: Need to retrieve from configurations
+
+        eval_session = build_eval_session(eval_file=path_eval_config, result_format=result_format)
+        agent_eval_executions = build_agent_eval_executions(eval_session=eval_session)
+
+        self._console.clear()
+
+        with LiveStatus(agent_eval_execs=agent_eval_executions) as live_status:
+            failed = run_evals(
+                eval_session=eval_session,
+                agent_eval_executions=agent_eval_executions,
+                eval_file=path_eval_config,
+                on_update=lambda: live_status.update(agent_eval_execs=agent_eval_executions),
+            )
+
+        logger = logging.getLogger(__name__)
+        completed = [
+            aee for aee in agent_eval_executions if aee.status == AgentEvalStatus.COMPLETED
+        ]
+        summary = f"{len(completed)} agent(s) completed, {len(failed)} failed"
+        logger.info(f"Evaluation run finished: {summary}")
+        print(f"\n{summary}")
+        for aee in failed:
+            print(f"  FAILED: {aee.agent_config.agent_type}-{aee.agent_config.agent_model}")
+
+        print(
+            f"saving results file to {eval_session.run_dir / get_results_filename(result_format)}"
+        )
+        results_service = get_results_service(
+            result_format=result_format, run_dir=eval_session.run_dir
+        )
+        results_service.export(aees=agent_eval_executions)
+        print("results file saved")
 
 
 class LiveStatus:
