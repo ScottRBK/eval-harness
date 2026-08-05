@@ -18,13 +18,13 @@ class Menu:
     def __init__(
             self, 
             *,
-            terminal: Terminal,
-            console: Console,
+            terminal: Terminal | None = None,
+            console: Console | None = None,
             app_settings: Settings = settings,
     ):
         self._settings = app_settings 
-        self._terminal = terminal 
-        self._console = console 
+        self._terminal = Terminal() if terminal is None else terminal
+        self._console = Console() if console is None else console
 
 
     def _print_header(self):

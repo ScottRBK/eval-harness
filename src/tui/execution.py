@@ -1,4 +1,5 @@
 import time
+import logging 
 from pathlib import Path
 from uuid import uuid4
 
@@ -17,10 +18,19 @@ from src.models import (
     AgentEvalExecution,
     EvalExecution,
     AgentEvalStatus,
+    ResultFormat,
+    EvalSession,
 )
 from src.config.settings import Settings, settings 
 from src.helpers.tui import wait_for_selection
-
+from src.evals_engine import (
+    get_results_filename,
+    run_evals, 
+    build_eval_session, 
+    build_agent_eval_executions,
+    get_results_service,
+    get_results_filename,
+)
 from .styles import PALETTE, STATUS_STYLES
 
 def print_introduction(fields: dict[str, str]):
@@ -40,7 +50,6 @@ def print_introduction(fields: dict[str, str]):
             padding=(1, 3),
         )
     )
-
 
 class Execution():
     def __init__(self, terminal: Terminal, console: Console, app_settings: Settings = settings):
@@ -70,9 +79,6 @@ class Execution():
                 )
             )      
 
-    def _invoke_eval_run(self, eval_config: Path):
-        pass
-
     def _print_eval_configs(self, selected_idx: int = 0):
         self._console.clear()
         self._print_header()        
@@ -81,6 +87,15 @@ class Execution():
                 self._console.print(f"> {config}", style=PALETTE['value'])
             else:
                 self._console.print(f" {config}", style=PALETTE['label'])
+
+
+    def handle_eval_start(self, eval_session: EvalSession):
+        print_introduction({
+                    "Session ID": str(eval_session.session_id),
+                    "Output Directory": str(eval_session.run_dir),
+                    "Evals": eval_session.eval_file,
+                    "Results": eval_session.result_format,
+                })
 
 
     def select_eval_config(self):
@@ -93,7 +108,35 @@ class Execution():
             return None
 
         selected_config = self._eval_configs[selected_idx]
-        print(selected_config)
+        path_eval_config = Path(selected_config)
+        result_format = ResultFormat.JSON #TODO: Need to retrieve from configuration
+    
+        eval_session = build_eval_session(eval_file=path_eval_config, result_format=result_format) 
+        agent_eval_executions = build_agent_eval_executions(eval_session=eval_session)
+
+        self._console.clear()
+
+        with LiveStatus(agent_eval_execs=agent_eval_executions) as live_status:
+            failed = run_evals(
+                eval_session=eval_session,
+                agent_eval_executions=agent_eval_executions,
+                eval_file=path_eval_config,
+                on_update=lambda: live_status.update(agent_eval_execs=agent_eval_executions),
+                )
+            
+        logger = logging.getLogger(__name__)
+        completed = [aee for aee in agent_eval_executions if aee.status == AgentEvalStatus.COMPLETED]
+        summary = f"{len(completed)} agent(s) completed, {len(failed)} failed"
+        logger.info(f"Evaluation run finished: {summary}")
+        print(f"\n{summary}")
+        for aee in failed:
+            print(f"  FAILED: {aee.agent_config.agent_type}-{aee.agent_config.agent_model}")
+
+        print(f"saving results file to {eval_session.run_dir / get_results_filename(result_format)}")
+        results_service = get_results_service(result_format=result_format, run_dir=eval_session.run_dir)
+        results_service.export(aees=agent_eval_executions)
+        print("results file saved")
+
 
 class LiveStatus:
     def __init__(self, agent_eval_execs: list[AgentEvalExecution]):

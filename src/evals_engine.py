@@ -5,25 +5,42 @@ import keyword
 import os
 import sys
 import textwrap
+import signal
 import logging
+import docker
+import json
+
 from pathlib import Path
 from queue import Queue, Empty
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 from datetime import datetime
-from uuid import UUID
+from uuid import UUID, uuid4
+from agent_shell.models.agent import AgentType
 
-from src.models import AgentEvalExecution, AgentEvalStatus
+from src.models import (
+    AgentConfig,
+    AgentEvalExecution, 
+    AgentEvalStatus,
+    Eval,
+    EvalExecution,
+    EvalSession,
+    ResultFormat,
+)
 from src.docker_runner import DockerRunner, build_image
-from src.logging_config import agent_logger
+from src.logging_config import agent_logger, configure_logging
 from src.helpers.naming import safe_name
 from src.config.settings import settings
 from src.evaluation_file_protocol import EvaluationFile
-
+from src.repositories.evaluation_results import (
+    EvaluationResultsService,
+    JsonEvaluationResultsRepository,
+    CsvEvaluationResultsRepository,
+)
 
 logger = logging.getLogger(__name__)
-
+_SESSION_LABEL = "com.eval-harness.session"
 
 class EvalImageResolver:
     """Resolve prebuilt images and build each eval-owned Dockerfile once per session."""
@@ -82,6 +99,108 @@ if _EvalHarnessAgentShell is not None:
     _EvalHarnessAgentShell.execute = _eval_harness_tracked_execute
 """
 
+def _cleanup_eval_containers(signum, frame):
+    """Kill all eval harness containers on SIGINT/SIGTERM."""
+    try:
+        client = docker.from_env()
+        for container in client.containers.list(filters={"label": _SESSION_LABEL}, all=True):
+            container.remove(force=True)
+            logger.info(f"Cleaned up container {container.name}")
+    except Exception as e:
+        logger.error(f"Container cleanup failed: {e}")
+    raise KeyboardInterrupt()
+
+def get_results_filename(result_format: ResultFormat) -> str:
+    match result_format:
+        case ResultFormat.JSON:
+            return settings.RESULTS_FILENAME
+        case ResultFormat.CSV:
+            return settings.CSV_RESULTS_FILENAME
+        case _:
+            raise ValueError("Result Format has not been implemented yet")
+
+
+def get_results_service(result_format: ResultFormat, run_dir: Path) -> EvaluationResultsService:
+    match result_format:
+        case ResultFormat.JSON:
+            return EvaluationResultsService(
+                results_repo=JsonEvaluationResultsRepository(run_dir=run_dir)
+            )
+        case ResultFormat.CSV:
+            return EvaluationResultsService(
+                results_repo=CsvEvaluationResultsRepository(run_dir=run_dir)
+            )
+        case _:
+            raise ValueError("Result Format has not been implemented yet")
+
+
+def build_eval_session(
+    eval_file: Path,
+    result_format: ResultFormat,
+) -> EvalSession:
+
+    session_id = uuid4()
+    eval_config_str = eval_file.read_text(encoding="utf-8")
+    raw = json.loads(eval_config_str)
+
+    return EvalSession(
+        session_id=session_id,
+        evals=[Eval(**e) for e in raw["evals"]],
+        agents=[
+            AgentConfig(
+                agent_type=AgentType(a["agent_type"]),
+                agent_model=a["agent_model"],
+                effort=a.get("effort") or None,
+                processing_group=a.get("processing_group") or None,
+            )
+            for a in raw["agents"]
+        ],
+        eval_file=str(eval_file),
+        result_format=result_format,
+        run_dir=Path(settings.OUTPUT_DIR) / f"{datetime.now():%Y%m%d_%H%M%S}_{session_id}"
+    )
+
+def build_agent_eval_executions(
+    eval_session: EvalSession
+) -> list[AgentEvalExecution]:
+
+    evals = eval_session.evals
+    agents = eval_session.agents
+    return [
+        AgentEvalExecution(
+            agent_config=agent,
+            total_score=0,
+            total_tokens=0,
+            total_time_taken_seconds=0,
+            evals_executions=[EvalExecution(id=uuid4(), eval=e, agent_config=agent) for e in evals],
+            status=AgentEvalStatus.PENDING,
+        )
+        for agent in agents
+    ]
+
+def _noop_update() -> None:
+    pass
+
+def run_evals(
+    eval_session: EvalSession,
+    agent_eval_executions: list[AgentEvalExecution],
+    eval_file: Path,
+    on_update: Callable[[], None] | None = None,
+) -> list[AgentEvalExecution]:
+
+    with configure_logging(eval_session.run_dir) as run_dir:
+        logger.info(f"Session {eval_session.session_id} starting")
+
+        signal.signal(signal.SIGINT, _cleanup_eval_containers)
+        signal.signal(signal.SIGTERM, _cleanup_eval_containers)
+        logger.info("Beginging Evaluation Run")
+        return run_session(
+            agent_eval_executions=agent_eval_executions,
+            on_update=_noop_update if on_update is None else on_update,
+            max_workers=settings.MAX_AGENT_CONCURRENCY,
+            run_dir=eval_session.run_dir, 
+            session_id=eval_session.session_id,
+        )
 
 def run_agent(
     aee: AgentEvalExecution,
@@ -141,11 +260,11 @@ def run_agent(
             )
 
             docker_runner = DockerRunner(
-                agent_type=aee.agent_config.agent_type,
-                agent_model=aee.agent_config.agent_model,
-                agent_effort=aee.agent_config.effort,
-                logger=log,
-                session_id=session_id,
+            agent_type=aee.agent_config.agent_type,
+            agent_model=aee.agent_config.agent_model,
+            agent_effort=aee.agent_config.effort,
+            logger=log,
+            session_id=session_id,
             )
 
             run_count = max(eval_exec.eval.run_count, 1)

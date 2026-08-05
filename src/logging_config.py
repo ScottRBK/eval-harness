@@ -9,8 +9,10 @@ logger you write to owns its file" - no thread-locals, no record filtering.
 """
 
 import logging
+from typing import Iterator
 from pathlib import Path
 from datetime import datetime
+from contextlib import contextmanager
 
 from src.config.settings import settings
 from src.helpers.naming import safe_name
@@ -25,10 +27,9 @@ def agent_label(cfg) -> str:
         parts.append(cfg.effort)
     return "_".join(parts)
 
-
-def configure_logging(session_id) -> Path:
+@contextmanager
+def configure_logging(run_dir: Path) -> Iterator[Path]:
     """Create OUTPUT_DIR/<run>/ with a catch-all session log. Returns the run dir."""
-    run_dir = Path(settings.OUTPUT_DIR) / f"{datetime.now():%Y%m%d_%H%M%S}_{session_id}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
     handler = logging.FileHandler(run_dir / "session.log", encoding="utf-8")
@@ -40,7 +41,12 @@ def configure_logging(session_id) -> Path:
 
     logging.getLogger("docker").setLevel(settings.DOCKER_LOG_LEVEL)
     logging.getLogger("urllib3").setLevel(settings.URLLIB3_LOG_LEVEL)
-    return run_dir
+
+    try:
+        yield run_dir
+    finally:
+        root.removeHandler(handler)
+
 
 
 def agent_logger(cfg, run_dir) -> logging.Logger:

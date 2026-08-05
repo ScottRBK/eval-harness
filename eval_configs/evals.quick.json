@@ -17,7 +17,7 @@
     ],
     "agents": [
         {
-            "agent_type": "codex",
+            "agent_type": "copilot_cli",
             "agent_model": "gpt-5.4-mini"
         },
         {
