@@ -29,7 +29,11 @@ product). All fields are documented, with examples, in
 [Configuration](../../docs/config.md#evaluation-configuration). Points that matter when
 composing a run:
 
-- Do not overwrite `evals.json` (the default file) - write a new file and pass it with `-ef`.
+- Before creating a personal configuration, ask whether it should be an ignored local file or
+  a version-controlled configuration in a separate directory. Local files under `eval_configs/`
+  should use the `.local.json` suffix. A separate directory can be committed and selected through
+  `EVAL_HARNESS_EVAL_CONFIG_DIR`.
+- Do not modify the tracked example configuration files.
 - `run_count` re-runs an eval in a fresh container each time; the recorded `score` is the
   **mean** across runs, while tokens and time are totals. Raise it to reduce variance when
   comparing agents.
@@ -43,11 +47,29 @@ composing a run:
   as `encode_repo_forgetful`.
 
 ## Launch
+Start the interactive TUI to choose a configuration from `EVAL_CONFIG_DIR`:
+
 ```bash
-uv run main.py                      # runs the default evals.json
-uv run main.py -ef <file>.json      # runs a specific evaluation file
-uv run main.py -rf csv              # writes results.csv instead of results.json
+uv run main.py
 ```
+
+For a version-controlled configuration directory, set the directory before starting the TUI:
+
+```bash
+EVAL_HARNESS_EVAL_CONFIG_DIR=path/to/team-eval-configs uv run main.py
+```
+
+Run a specific configuration headlessly with `--run_eval` and `--eval_file`:
+
+```bash
+uv run main.py --run_eval --eval_file eval_configs/simple_evals.example.json
+uv run main.py \
+  --run_eval \
+  --eval_file eval_configs/my-evals.local.json \
+  --results_format csv
+```
+
+The TUI currently writes JSON results. The `--results_format` option applies to headless runs.
 
 Phase timeouts default to 3600s (arrange), 3600s (act) and 600s (score) and are overridable via
 environment variables - see [Configuration](../../docs/config.md#application-configuration).

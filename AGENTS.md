@@ -12,6 +12,7 @@ uv sync
 docker build -t eval-harness:latest -f src/docker/Dockerfile src/docker/
 docker build -t eval-harness-rust:latest -f src/docker/rust/Dockerfile src/docker/
 uv run main.py
+uv run main.py --run_eval --eval_file eval_configs/simple_evals.example.json
 ```
 
     Rebuild the image manually after Dockerfile changes — there is no auto-rebuild currently.
@@ -43,6 +44,14 @@ Before evals run, each agent/model is gated by a health check (`DockerRunner.hea
 
 The harness passes `AGENT_TYPE` and `AGENT_MODEL` to the container via env vars; `act()` reads them 
 and builds an `AgentShell` from `agent_shell` (the unified CLI-agent wrapper installed in the image).
+
+Evaluation configuration files live under `EVAL_CONFIG_DIR` (default `eval_configs`) and are
+listed by the interactive TUI. The tracked examples are `evals.example.json`, containing all
+example evaluations, and `simple_evals.example.json`, containing a smaller two-evaluation run.
+For personal configurations, use `.local.json` under the default directory for an ignored local
+file, or use a separate directory selected with `EVAL_HARNESS_EVAL_CONFIG_DIR` when the
+configuration should be committed. Headless execution requires `--run_eval` and an explicit
+`--eval_file`.
 
 ## Evaluations
 Each of the example evaluations maps to an evaluation pattern documented in `docs/eval_patterns`.

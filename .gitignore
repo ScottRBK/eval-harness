@@ -23,5 +23,8 @@ output/
 logs/
 evals/
 
+# Local evaluation configurations
+eval_configs/*.local.json
+
 #environments
 .env 

@@ -47,21 +47,32 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 1. Fork the repo 
 1. run `uv sync` 
 1. Replace the example eval folder with your own evals (or leave it in place if you want to see an example)
-1. Update evals.json 
-1. build the container(s)
+1. Choose where your evaluation configuration will live. For an ignored local config, copy
+   `eval_configs/simple_evals.example.json` to `eval_configs/my-evals.local.json`. For a
+   version-controlled team config, use a separate directory and set `EVAL_HARNESS_EVAL_CONFIG_DIR`.
+1. Build the container(s)
 ```bash
 docker build -t eval-harness:latest -f src/docker/Dockerfile src/docker/
 docker build -t eval-harness-rust:latest -f src/docker/rust/Dockerfile src/docker/
 ```
-1. execute the harness 
-```bash 
+1. Start the interactive TUI
+```bash
 uv run main.py
+```
+
+The TUI lists JSON files in `EVAL_CONFIG_DIR`, which defaults to `eval_configs`.
+Local `*.local.json` files in the default directory are ignored by Git. For a shared,
+version-controlled directory, set `EVAL_HARNESS_EVAL_CONFIG_DIR` before starting the TUI.
+For a headless run, pass a config file explicitly:
+
+```bash
+uv run main.py --run_eval --eval_file eval_configs/simple_evals.example.json
 ```
 > [!TIP]
 > If you would like to use an AI Agent to help you build evals it is recommended you install the 
 > [skills](skills/) that accompany this repository.
 
-## [Configration](docs/config.md)
+## [Configuration](docs/config.md)
 
 # Harness Architecture
 
@@ -70,9 +81,12 @@ uv run main.py
 The harness is structured in a way that there is an [evaluation protocol](src/evaluation_file_protocol.py), 
 any evaluation must implement the same methods within the protocol.
 
-When the harness is run it ingests an evaluation configuration file (the default is [evals.json](evals.json)), which determines
-which evaluations are in scope of the evaluation run, and also which agent harness/model combinations
-should be in scope of the run.
+The harness ingests an evaluation configuration file that determines which evaluations
+and agent harness/model combinations are in scope. The interactive TUI discovers JSON
+configuration files in `EVAL_CONFIG_DIR` (default `eval_configs`). The repository includes
+`eval_configs/evals.example.json` with every example evaluation and
+`eval_configs/simple_evals.example.json` with a smaller two-evaluation run. Headless
+runs require the configuration file to be supplied with `--eval_file`.
 
 When I build my own automated tests for testing my actual code, I have used the popular _Arrange_, 
 _Act_ and _Assert_ pattern, to this end I have adopted these as methods that any evaluation class must

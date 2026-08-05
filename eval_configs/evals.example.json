@@ -1,0 +1,72 @@
+{
+    "evals": [
+        {
+            "number": 1,
+            "eval_dir": "basic_eval",
+            "description": "Ask an agent a series of questions about eval-harness",
+            "run_count": 1,
+            "tags": ["python", "questions"]
+        },
+        {
+            "number": 2,
+            "eval_dir": "chess_engine",
+            "description": "creates a chess engine in rust",
+            "run_count": 1,
+            "tags": ["rust", "feature"]
+        },
+        {
+            "number": 3,
+            "eval_dir": "encode_repo_forgetful",
+            "description": "encode a repo into forgetful and then query forgetful for facts regarding it",
+            "run_count": 1,
+            "tags": ["forgetful", "python"]
+        },
+        {
+            "number": 4,
+            "eval_dir": "eval_generator",
+            "description": "Have an agent write the score phase for an evaluation",
+            "run_count": 1,
+            "tags": ["python", "evals"]
+        },
+        {
+            "number": 5,
+            "eval_dir": "inflection_bug_fix",
+            "description": "bug fixes in the python string transformation lib named inflection",
+            "run_count": 1,
+            "tags": ["python", "bugs"]
+        },
+        {
+            "number": 6,
+            "eval_dir": "inflection_test_writing",
+            "description": "have the agent write automated tests then mutate code to ensure tests fail",
+            "run_count": 1,
+            "tags": ["python", "tests"]
+        },
+        {
+            "number": 7,
+            "eval_dir": "repair_nginx_service",
+            "description": "Have an agent attempt to repair a broken nginx service",
+            "run_count": 1,
+            "tags": ["terminal"]
+        },
+        {
+            "number": 8,
+            "eval_dir": "saleor_spree_mapping",
+            "description": "create a canonical mapping between the saleor and spree solutions",
+            "run_count": 1,
+            "tags": ["mapping", "python", "ruby"]
+        }
+    ],
+    "agents": [
+        {
+            "agent_type": "copilot_cli",
+            "agent_model": "gpt-5.4-mini",
+            "processing_group": "example-copilot"
+        },
+        {
+            "agent_type": "copilot_cli",
+            "agent_model": "gpt-5-mini",
+            "processing_group": "example-copilot"
+        }
+    ]
+}
