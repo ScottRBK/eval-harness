@@ -64,7 +64,6 @@ def main():
             eval_session=eval_session,
             agent_eval_executions=agent_eval_executions,
             eval_file=args.eval_file,
-            result_format=eval_session.result_format,
             on_update=None,
         )
 
