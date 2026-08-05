@@ -198,7 +198,7 @@ def run_evals(
             agent_eval_executions=agent_eval_executions,
             on_update=_noop_update if on_update is None else on_update,
             max_workers=settings.MAX_AGENT_CONCURRENCY,
-            run_dir=eval_session.run_dir, 
+            run_dir=run_dir, 
             session_id=eval_session.session_id,
         )
 

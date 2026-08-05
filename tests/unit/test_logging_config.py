@@ -164,3 +164,39 @@ class TestAgentLogger:
         # Assert 
         assert first is second
         assert handler_count == 1
+
+    def test_removes_agent_handler_on_context_exit(self, run_dir):
+        # Arrange
+        cfg = _cfg(agent_model="haiku")
+
+        # Act
+        with configure_logging(run_dir):
+            log = agent_logger(cfg, run_dir)
+            handler_count_during_run = len(log.handlers)
+        handler_count_after_run = len(log.handlers)
+
+        # Assert
+        assert handler_count_during_run == 1
+        assert handler_count_after_run == 0
+
+    def test_same_agent_writes_to_separate_session_files(self, run_dir):
+        # Arrange
+        cfg = _cfg(agent_model="haiku")
+        first_run_dir = run_dir.parent / "first-run"
+        second_run_dir = run_dir.parent / "second-run"
+        first_message = "first-session"
+        second_message = "second-session"
+
+        # Act
+        with configure_logging(first_run_dir):
+            agent_logger(cfg, first_run_dir).info(first_message)
+        with configure_logging(second_run_dir):
+            agent_logger(cfg, second_run_dir).info(second_message)
+
+        # Assert
+        first_log = (first_run_dir / "claude_code_haiku.log").read_text()
+        second_log = (second_run_dir / "claude_code_haiku.log").read_text()
+        assert first_message in first_log
+        assert second_message not in first_log
+        assert second_message in second_log
+        assert first_message not in second_log

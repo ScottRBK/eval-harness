@@ -29,7 +29,6 @@ from src.evals_engine import (
     build_eval_session, 
     build_agent_eval_executions,
     get_results_service,
-    get_results_filename,
 )
 from .styles import PALETTE, STATUS_STYLES
 
@@ -99,6 +98,10 @@ class Execution():
 
 
     def select_eval_config(self):
+        if not self._eval_configs:
+            self._console.print("No evaluation configuration files found", style=PALETTE["label"])
+            return None
+
         selected_idx = wait_for_selection(
             terminal=self._terminal,
             options_count=len(self._eval_configs),
@@ -109,7 +112,7 @@ class Execution():
 
         selected_config = self._eval_configs[selected_idx]
         path_eval_config = Path(selected_config)
-        result_format = ResultFormat.JSON #TODO: Need to retrieve from configuration
+        result_format = ResultFormat.JSON #TODO: Need to retrieve from configurations
     
         eval_session = build_eval_session(eval_file=path_eval_config, result_format=result_format) 
         agent_eval_executions = build_agent_eval_executions(eval_session=eval_session)

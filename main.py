@@ -1,12 +1,8 @@
 import argparse
-import json
 import logging
 import sys
-from uuid import UUID, uuid4
 from pathlib import Path
 
-
-from src.config.settings import settings
 from src.evals_engine import (
     run_evals, 
     build_eval_session, 
@@ -14,15 +10,9 @@ from src.evals_engine import (
     get_results_service,
     get_results_filename,
 )
-from src.logging_config import configure_logging
 from src.tui.menu import Menu
 from src.models import (
-    AgentConfig,
-    AgentEvalExecution,
     AgentEvalStatus,
-    Eval,
-    EvalSession,
-    EvalExecution,
     ResultFormat
 )
 
@@ -97,7 +87,6 @@ def main():
         else: 
             sys.exit(0)
 
-    print("post eval test")
     menu = Menu()
     menu.display() 
 

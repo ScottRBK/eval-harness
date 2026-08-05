@@ -11,7 +11,6 @@ logger you write to owns its file" - no thread-locals, no record filtering.
 import logging
 from typing import Iterator
 from pathlib import Path
-from datetime import datetime
 from contextlib import contextmanager
 
 from src.config.settings import settings
@@ -45,9 +44,16 @@ def configure_logging(run_dir: Path) -> Iterator[Path]:
     try:
         yield run_dir
     finally:
+        handler.close()
         root.removeHandler(handler)
 
-
+        for name in list(logging.root.manager.loggerDict):
+            if not name.startswith("eval.agent."):
+                continue
+            agent_log = logging.getLogger(name)
+            for agent_handler in agent_log.handlers[:]:
+                agent_log.removeHandler(agent_handler)
+                agent_handler.close()  
 
 def agent_logger(cfg, run_dir) -> logging.Logger:
     """A logger that writes to that agent's own file (and bubbles to session.log)."""
