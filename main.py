@@ -52,11 +52,14 @@ def main():
 
     if args.run_eval:
         if not args.eval_file:
-            raise ValueError("no evaluation file parameter passed, please use -ef or --eval_file")
+            parser.error("no evaluation file parameter passed, please use -ef or --eval_file")
 
-        eval_session = build_eval_session(
-            eval_file=args.eval_file, result_format=args.results_format
-        )
+        try:
+            eval_session = build_eval_session(
+                eval_file=args.eval_file, result_format=args.results_format
+            )
+        except (OSError, ValueError) as exc:
+            parser.error(str(exc))
         agent_eval_executions = build_agent_eval_executions(eval_session=eval_session)
 
         failed = run_evals(

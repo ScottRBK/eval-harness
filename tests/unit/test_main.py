@@ -119,10 +119,37 @@ def test_run_eval_reports_failures_and_exits_nonzero(
     assert "FAILED: copilot_cli-test-model" in output
 
 
-def test_run_eval_requires_an_eval_file(monkeypatch):
+def test_run_eval_requires_an_eval_file(monkeypatch, capsys):
     # Arrange
     monkeypatch.setattr(sys, "argv", ["main.py", "--run_eval"])
 
-    # Act / Assert
-    with pytest.raises(ValueError, match="no evaluation file parameter passed"):
+    # Act
+    with pytest.raises(SystemExit) as exit_info:
         app.main()
+
+    # Assert
+    assert exit_info.value.code == 2
+    assert "no evaluation file parameter passed" in capsys.readouterr().err
+
+
+def test_run_eval_reports_invalid_configuration_without_traceback(monkeypatch, capsys, tmp_path):
+    # Arrange
+    config_path = tmp_path / "invalid-evals.json"
+    config_path.write_text("{", encoding="utf-8")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["main.py", "--run_eval", "--eval_file", str(config_path)],
+    )
+
+    # Act
+    with pytest.raises(SystemExit) as exit_info:
+        app.main()
+
+    # Assert
+    assert exit_info.value.code == 2
+    output = capsys.readouterr()
+    assert output.out == ""
+    assert "Invalid evaluation configuration" in output.err
+    assert "invalid JSON" in output.err
+    assert "Traceback" not in output.err
