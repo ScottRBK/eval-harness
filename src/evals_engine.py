@@ -21,7 +21,7 @@ from agent_shell.models.agent import AgentType
 
 from src.models import (
     AgentConfig,
-    AgentEvalExecution, 
+    AgentEvalExecution,
     AgentEvalStatus,
     Eval,
     EvalExecution,
@@ -41,6 +41,7 @@ from src.repositories.evaluation_results import (
 
 logger = logging.getLogger(__name__)
 _SESSION_LABEL = "com.eval-harness.session"
+
 
 class EvalImageResolver:
     """Resolve prebuilt images and build each eval-owned Dockerfile once per session."""
@@ -99,6 +100,7 @@ if _EvalHarnessAgentShell is not None:
     _EvalHarnessAgentShell.execute = _eval_harness_tracked_execute
 """
 
+
 def _cleanup_eval_containers(signum, frame):
     """Kill all eval harness containers on SIGINT/SIGTERM."""
     try:
@@ -109,6 +111,7 @@ def _cleanup_eval_containers(signum, frame):
     except Exception as e:
         logger.error(f"Container cleanup failed: {e}")
     raise KeyboardInterrupt()
+
 
 def get_results_filename(result_format: ResultFormat) -> str:
     match result_format:
@@ -157,12 +160,11 @@ def build_eval_session(
         ],
         eval_file=str(eval_file),
         result_format=result_format,
-        run_dir=Path(settings.OUTPUT_DIR) / f"{datetime.now():%Y%m%d_%H%M%S}_{session_id}"
+        run_dir=Path(settings.OUTPUT_DIR) / f"{datetime.now():%Y%m%d_%H%M%S}_{session_id}",
     )
 
-def build_agent_eval_executions(
-    eval_session: EvalSession
-) -> list[AgentEvalExecution]:
+
+def build_agent_eval_executions(eval_session: EvalSession) -> list[AgentEvalExecution]:
 
     evals = eval_session.evals
     agents = eval_session.agents
@@ -178,8 +180,10 @@ def build_agent_eval_executions(
         for agent in agents
     ]
 
+
 def _noop_update() -> None:
     pass
+
 
 def run_evals(
     eval_session: EvalSession,
@@ -198,9 +202,10 @@ def run_evals(
             agent_eval_executions=agent_eval_executions,
             on_update=_noop_update if on_update is None else on_update,
             max_workers=settings.MAX_AGENT_CONCURRENCY,
-            run_dir=run_dir, 
+            run_dir=run_dir,
             session_id=eval_session.session_id,
         )
+
 
 def run_agent(
     aee: AgentEvalExecution,
@@ -210,7 +215,7 @@ def run_agent(
     image_resolver: EvalImageResolver | None = None,
 ):
 
-    log = logger  
+    log = logger
 
     try:
         log = agent_logger(aee.agent_config, run_dir) if run_dir else logger
@@ -260,11 +265,11 @@ def run_agent(
             )
 
             docker_runner = DockerRunner(
-            agent_type=aee.agent_config.agent_type,
-            agent_model=aee.agent_config.agent_model,
-            agent_effort=aee.agent_config.effort,
-            logger=log,
-            session_id=session_id,
+                agent_type=aee.agent_config.agent_type,
+                agent_model=aee.agent_config.agent_model,
+                agent_effort=aee.agent_config.effort,
+                logger=log,
+                session_id=session_id,
             )
 
             run_count = max(eval_exec.eval.run_count, 1)

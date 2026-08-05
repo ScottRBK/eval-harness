@@ -125,7 +125,7 @@ class TestAgentLogger:
         assert message in (run_dir / "claude_code_haiku.log").read_text()
 
     def test_agent_record_also_reaches_session_log(self, run_dir):
-        # Arrange 
+        # Arrange
         message = "bubbles-up"
 
         # Act
@@ -152,7 +152,7 @@ class TestAgentLogger:
         assert sonnet_message in sonnet and haiku_message not in sonnet
 
     def test_is_idempotent_no_duplicate_handlers(self, run_dir):
-        # Arrange 
+        # Arrange
         cfg = _cfg(agent_model="haiku")
 
         # Act
@@ -161,7 +161,7 @@ class TestAgentLogger:
             second = agent_logger(cfg, run_dir)
             handler_count = len(first.handlers)
 
-        # Assert 
+        # Assert
         assert first is second
         assert handler_count == 1
 

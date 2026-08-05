@@ -6,26 +6,26 @@ from rich.table import Table
 from blessed import Terminal
 
 from .styles import PALETTE
-from .execution import Execution 
+from .execution import Execution
 
-from src.config.settings import Settings, settings 
+from src.config.settings import Settings, settings
 from src.helpers.tui import wait_for_selection
 
 
 _options = ["Settings", "Execute Evaluations", "Display Results"]
 
+
 class Menu:
     def __init__(
-            self, 
-            *,
-            terminal: Terminal | None = None,
-            console: Console | None = None,
-            app_settings: Settings = settings,
+        self,
+        *,
+        terminal: Terminal | None = None,
+        console: Console | None = None,
+        app_settings: Settings = settings,
     ):
-        self._settings = app_settings 
+        self._settings = app_settings
         self._terminal = Terminal() if terminal is None else terminal
         self._console = Console() if console is None else console
-
 
     def _print_header(self):
 
@@ -52,16 +52,16 @@ class Menu:
             )
         )
 
-    def _print_menu(self, selected_idx: int = 0 ):
+    def _print_menu(self, selected_idx: int = 0):
         self._console.clear()
-        self._print_header()        
-        for idx, option in enumerate(_options): 
+        self._print_header()
+        for idx, option in enumerate(_options):
             if idx == selected_idx:
-                self._console.print(f"> {option}", style=PALETTE['value'])
+                self._console.print(f"> {option}", style=PALETTE["value"])
             else:
-                self._console.print(f" {option}", style=PALETTE['label'])
+                self._console.print(f" {option}", style=PALETTE["label"])
 
-    def _invoke_option(self,selected_idx):
+    def _invoke_option(self, selected_idx):
         match selected_idx:
             case 0:
                 print("selected  config")
@@ -73,7 +73,7 @@ class Menu:
                 self._display_results()
 
     def _display_config(self):
-        pass 
+        pass
 
     def _run_evals(self):
         eval_exec = Execution(
@@ -88,20 +88,18 @@ class Menu:
 
     def display(self):
         selected_idx = wait_for_selection(
-            terminal=self._terminal, 
-            options_count=len(_options), 
-            render=self._print_menu
+            terminal=self._terminal, options_count=len(_options), render=self._print_menu
         )
 
-        self._invoke_option(selected_idx) 
-    
+        self._invoke_option(selected_idx)
+
+
 if __name__ == "__main__":
     console = Console()
-    terminal = Terminal() 
+    terminal = Terminal()
     menu = Menu(
         terminal=terminal,
         console=console,
         app_settings=settings,
     )
-    menu.display() 
-
+    menu.display()

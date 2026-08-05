@@ -26,6 +26,7 @@ def agent_label(cfg) -> str:
         parts.append(cfg.effort)
     return "_".join(parts)
 
+
 @contextmanager
 def configure_logging(run_dir: Path) -> Iterator[Path]:
     """Create OUTPUT_DIR/<run>/ with a catch-all session log. Returns the run dir."""
@@ -53,7 +54,8 @@ def configure_logging(run_dir: Path) -> Iterator[Path]:
             agent_log = logging.getLogger(name)
             for agent_handler in agent_log.handlers[:]:
                 agent_log.removeHandler(agent_handler)
-                agent_handler.close()  
+                agent_handler.close()
+
 
 def agent_logger(cfg, run_dir) -> logging.Logger:
     """A logger that writes to that agent's own file (and bubbles to session.log)."""

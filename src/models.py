@@ -76,9 +76,8 @@ class EvalSession:
     evals: list[Eval]
     agents: list[AgentConfig]
     result_format: ResultFormat
-    eval_file: str 
+    eval_file: str
     run_dir: Path
-
 
 
 @dataclass
@@ -86,5 +85,3 @@ class EvalRun:
     eval_runs: list[EvalExecution]
     date_executed: datetime
     agents: list[AgentConfig]
-
-    

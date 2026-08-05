@@ -1,4 +1,3 @@
-
 from src.models import AgentEvalStatus
 
 PALETTE = {
