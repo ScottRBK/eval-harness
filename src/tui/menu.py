@@ -12,7 +12,11 @@ from src.config.settings import Settings, settings
 from src.helpers.tui import wait_for_selection
 
 
-_options = ["Settings", "Execute Evaluations", "Display Results"]
+_options = [
+    "Settings [Not Implemented]",
+    "Execute Evaluations",
+    "Display Results [Not Implemented]",
+]
 
 
 class Menu:
@@ -64,15 +68,17 @@ class Menu:
     def _invoke_option(self, selected_idx):
         match selected_idx:
             case 0:
-                print("selected  config")
-                self._display_config()
+                # TODO: implement display settings
+                # self._display_settings()
+                self.display()
             case 1:
                 self._run_evals()
             case 2:
-                print("selected view results")
-                self._display_results()
+                # TODO: implement display results
+                # self._display_results()
+                self.display()
 
-    def _display_config(self):
+    def _display_settings(self):
         pass
 
     def _run_evals(self):
