@@ -73,7 +73,10 @@ class Execution:
             Panel(
                 "Select a configuration file to begin an evaluation",
                 title=Text("AGENT EVAL HARNESS", style=f"bold {PALETTE['accent']}"),
-                subtitle=Text("Select config", style=f"dim {PALETTE['label']}"),
+                subtitle=Text(
+                    "Evaluations Execution · Select config (q to go back to main menu)",
+                    style=f"dim {PALETTE['value']}",
+                ),
                 box=box.ROUNDED,
                 border_style=PALETTE["border"],
                 padding=(1, 3),

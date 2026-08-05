@@ -49,7 +49,10 @@ class Menu:
             Panel(
                 grid,
                 title=Text("AGENT EVAL HARNESS", style=f"bold {PALETTE['accent']}"),
-                subtitle=Text("Select an Option", style=f"dim {PALETTE['label']}"),
+                subtitle=Text(
+                    "Main Menu · Select an option (q to exit)",
+                    style=f"dim {PALETTE['value']}",
+                ),
                 box=box.ROUNDED,
                 border_style=PALETTE["border"],
                 padding=(1, 3),
@@ -70,13 +73,13 @@ class Menu:
             case 0:
                 # TODO: implement display settings
                 # self._display_settings()
-                self.display()
+                pass
             case 1:
                 self._run_evals()
             case 2:
                 # TODO: implement display results
                 # self._display_results()
-                self.display()
+                pass
 
     def _display_settings(self):
         pass
@@ -93,11 +96,13 @@ class Menu:
         pass
 
     def display(self):
-        selected_idx = wait_for_selection(
-            terminal=self._terminal, options_count=len(_options), render=self._print_menu
-        )
-
-        self._invoke_option(selected_idx)
+        while True:
+            selected_idx = wait_for_selection(
+                terminal=self._terminal, options_count=len(_options), render=self._print_menu
+            )
+            if selected_idx is None:
+                break
+            self._invoke_option(selected_idx)
 
 
 if __name__ == "__main__":
