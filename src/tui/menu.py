@@ -17,7 +17,7 @@ _options = [
     "Application Settings",
     "Execute Evaluations",
     "Display Results [Not Implemented]",
-    "Quit"
+    "Quit",
 ]
 
 
@@ -74,7 +74,6 @@ class Menu:
         match selected_idx:
             case 0:
                 self._display_settings()
-                pass
             case 1:
                 self._run_evals()
             case 2:
@@ -85,11 +84,7 @@ class Menu:
                 pass
 
     def _display_settings(self):
-        config = Config(
-            terminal=self._terminal,
-            console=self._console,
-            app_settings=self._settings
-        ) 
+        config = Config(terminal=self._terminal, console=self._console, app_settings=self._settings)
         config.display_config()
 
     def _run_evals(self):
@@ -105,7 +100,6 @@ class Menu:
 
     def display(self):
         while True:
-
             selected_idx = wait_for_selection(
                 terminal=self._terminal, options_count=len(_options), render=self._print_menu
             )
