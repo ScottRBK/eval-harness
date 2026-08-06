@@ -7,15 +7,17 @@ from blessed import Terminal
 
 from .styles import PALETTE
 from .execution import Execution
+from .config import Config
 
 from src.config.settings import Settings, settings
 from src.helpers.tui import wait_for_selection
 
 
 _options = [
-    "Settings [Not Implemented]",
+    "Application Settings",
     "Execute Evaluations",
     "Display Results [Not Implemented]",
+    "Quit"
 ]
 
 
@@ -33,7 +35,7 @@ class Menu:
 
     def _print_header(self):
 
-        settings_to_dispay = {
+        settings_to_display = {
             "Eval Configs Directory": self._settings.EVAL_CONFIG_DIR,
             "Evals Directory": self._settings.EVALS_DIRS,
             "Output Directory": self._settings.OUTPUT_DIR,
@@ -42,7 +44,7 @@ class Menu:
         grid = Table.grid(padding=(0, 2))
         grid.add_column(justify="right", style=PALETTE["label"], no_wrap=True)
         grid.add_column(style=f"bold {PALETTE['value']}")
-        for label, value in settings_to_dispay.items():
+        for label, value in settings_to_display.items():
             grid.add_row(label, value)
 
         print(
@@ -71,8 +73,7 @@ class Menu:
     def _invoke_option(self, selected_idx):
         match selected_idx:
             case 0:
-                # TODO: implement display settings
-                # self._display_settings()
+                self._display_settings()
                 pass
             case 1:
                 self._run_evals()
@@ -80,9 +81,16 @@ class Menu:
                 # TODO: implement display results
                 # self._display_results()
                 pass
+            case 3:
+                pass
 
     def _display_settings(self):
-        pass
+        config = Config(
+            terminal=self._terminal,
+            console=self._console,
+            app_settings=self._settings
+        ) 
+        config.display_config()
 
     def _run_evals(self):
         eval_exec = Execution(
@@ -97,10 +105,12 @@ class Menu:
 
     def display(self):
         while True:
+
             selected_idx = wait_for_selection(
                 terminal=self._terminal, options_count=len(_options), render=self._print_menu
             )
-            if selected_idx is None:
+
+            if selected_idx is None or selected_idx == 3:
                 break
             self._invoke_option(selected_idx)
 

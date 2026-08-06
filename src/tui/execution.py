@@ -53,7 +53,7 @@ def print_introduction(fields: dict[str, str]):
 
 
 class Execution:
-    def __init__(self, terminal: Terminal, console: Console, app_settings: Settings = settings):
+    def __init__(self, *, terminal: Terminal, console: Console, app_settings: Settings = settings):
         self._terminal = terminal
         self._console = console
         self._settings = app_settings

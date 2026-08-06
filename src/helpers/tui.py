@@ -24,3 +24,12 @@ def wait_for_selection(
                 case _:
                     continue
             render(selected_idx)
+
+
+def wait_for_keypress(terminal: Terminal, render: Callable[[], None]) -> None:
+    render()
+    with terminal.cbreak(), terminal.hidden_cursor():
+        while True:
+            k = terminal.inkey()
+            if k:
+                break
