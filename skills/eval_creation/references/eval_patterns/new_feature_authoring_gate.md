@@ -100,7 +100,7 @@ When either route exposes the answer, prefer a private, identity-scrubbed snapsh
 - Remove original repository and package identity metadata, updating identity-specific baseline
   tests at the same time.
 - Authenticate through the harness-level token described in
-  [Authorisation](../authorisation.md#private-repositories-harness-level-github-token), preferably
+  [Authorisation](https://github.com/ScottRBK/eval-harness/blob/main/docs/authorisation.md#private-repositories-harness-level-github-token), preferably
   with a fine-grained token scoped to the snapshot repository.
 - Remove the Git remote before `act`.
 

@@ -19,20 +19,20 @@ The eval harness has established patterns for evaluations. Look to see if the ta
 user is looking to evaluate is a good fit for one of the following patterns, then read the
 appropriate guide for building an evaluation for that pattern:
 
-- [Search with Questions and Answers](../../docs/eval_patterns/search_with_qa.md) — search a
+- [Search with Questions and Answers](references/eval_patterns/search_with_qa.md) — search a
   knowledge base, then answer multiple-choice questions. Demonstrates MCP
   (`encode_repo_forgetful`).
-- [Bug Fix with Automated Tests](../../docs/eval_patterns/bug_fix.md) — fix a repository's failing
+- [Bug Fix with Automated Tests](references/eval_patterns/bug_fix.md) — fix a repository's failing
   tests while the scorer restores authoritative tests (`inflection_bug_fix`).
-- [Schema Field Mapping](../../docs/eval_patterns/schema_field_mapping.md) — produce a scored CSV
+- [Schema Field Mapping](references/eval_patterns/schema_field_mapping.md) — produce a scored CSV
   mapping between two data models (`saleor_spree_mapping`).
-- [New Feature with Automated Tests](../../docs/eval_patterns/new_feature.md) — implement a fixed
+- [New Feature with Automated Tests](references/eval_patterns/new_feature.md) — implement a fixed
   API against hidden score-time tests (`chess_engine`).
-- [Test Authoring](../../docs/eval_patterns/test_authoring.md) — write tests that are graded by
+- [Test Authoring](references/eval_patterns/test_authoring.md) — write tests that are graded by
   mutation testing (`inflection_test_writing`).
-- [Scorer Authoring](../../docs/eval_patterns/eval_generator.md) — write a scorer that distinguishes
+- [Scorer Authoring](references/eval_patterns/eval_generator.md) — write a scorer that distinguishes
   held-out correct and incorrect implementations (`eval_generator`).
-- [Terminal Task](../../docs/eval_patterns/terminal_task.md) — leave a container in a required final
+- [Terminal Task](references/eval_patterns/terminal_task.md) — leave a container in a required final
   state, graded by outcome-only checks (`repair_nginx_service`).
 
 ## Constraints

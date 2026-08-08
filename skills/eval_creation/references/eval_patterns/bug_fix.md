@@ -1,4 +1,4 @@
-# [Bug Fix with Automated Tests](../../example_evals/inflection_bug_fix)
+# [Bug Fix with Automated Tests](https://github.com/ScottRBK/eval-harness/tree/main/example_evals/inflection_bug_fix)
 
 This eval measures two things:
 1. The ability of an agent to diagnose and fix bugs in a codebase it has never seen before.
@@ -32,12 +32,12 @@ the [new feature](./new_feature.md) pattern, which sits at the opposite end of t
 > **private** fork, so the untouched upstream code isn't a `git clone` away for the agent. To do
 > that, set `EVAL_HARNESS_GITHUB_TOKEN` in `.env` and add the `gh auth setup-git` guard shown in
 > [search_with_qa](./search_with_qa.md); the harness injects the token as `GH_TOKEN` so the HTTPS
-> clone authenticates. See [authorisation](../authorisation.md#private-repositories-harness-level-github-token)
+> clone authenticates. See [authorisation](https://github.com/ScottRBK/eval-harness/blob/main/docs/authorisation.md#private-repositories-harness-level-github-token)
 > for details.
 
 Unlike the search-with-Q&A eval, there are no fixtures or helper calls here. The only values the
 phases need are the repo coordinates, so they are declared inline as literals in the per-phase
-embedded-value dicts (see [embedded values](../../README.md#embedded-values)).
+embedded-value dicts (see [embedded values](https://github.com/ScottRBK/eval-harness/blob/main/README.md#embedded-values)).
 
 ```python
 arrange_embedded_values = {

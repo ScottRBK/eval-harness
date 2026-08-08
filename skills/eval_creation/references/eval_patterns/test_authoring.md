@@ -1,4 +1,4 @@
-# [Test Authoring](../../example_evals/inflection_test_writing)
+# [Test Authoring](https://github.com/ScottRBK/eval-harness/tree/main/example_evals/inflection_test_writing)
 
 This eval measures an agent's ability to:
 

@@ -54,7 +54,8 @@ configuration should be committed. Headless execution requires `--run_eval` and 
 `--eval_file`.
 
 ## Evaluations
-Each of the example evaluations maps to an evaluation pattern documented in `docs/eval_patterns`.
+Each example evaluation maps to a pattern documented in
+`skills/eval_creation/references/eval_patterns`.
 Pi has no native MCP support, so it cannot run MCP-backed evaluations such as
 `encode_repo_forgetful`.
 

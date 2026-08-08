@@ -22,20 +22,35 @@ application for it.
 This harness ships with some example evals, as I come up with different types of 
 evaluations for my own workflows, then this example collection will increase.
 
-These evals are to some degree quite straight forward for modern harnesses and models, given that they 
-use public repos or present well known solved challenges that are likely in training data. That is fine 
-however as their primary function is to demonstrate the different evaluation patterns. Below is a 
-list of the patterns and a brief description:
+These evals are reasonably straightforward for modern harnesses and models because they use public
+repositories or well-known solved challenges that may appear in training data. Their primary purpose
+is to demonstrate the available evaluation patterns.
 
-|Evaluation Pattern|Description|Example Evaluation|
-|------------------|-----------|------------------|
-|[Search with Questions and Answers](docs/eval_patterns/search_with_qa.md)|Have an agent perform a search of a knowedge base and then answer multiple choice questions about it in a JSON file, this eval also demonstrates how you can add an mcp server to the agentic harness as part of the evaluation|encode_repo_forgetful|
-|[Bug Fix with Automated Tests](docs/eval_patterns/bug_fix.md)|Ask the agent to fix bugs in a repo that is causing automated tests to fail, this eval also demonstrates how to restore the original tests to ensure agent hasn't modified them to pass|inflection_bug_fix|
-|[Schema Field Mapping](docs/eval_patterns/schema_field_mapping.md)|Instructs the agent to create a field mapping between two data models and output the values to a CSV file for scoring, an alternative to the JSON question and answers|saleor_spree_mapping|
-|[New Feature with Automated Tests](docs/eval_patterns/new_feature.md)|Ask an agent to implement a new feature with prediefined API contract and run hidden automated tests after the agent has completed their work, it also demonstrates how you can make use of extrending the base docker image, in this example we add rustup to allow for the agent to use cargo to build and test in Rust|chess_engine|
-|[Test Authoring](docs/eval_patterns/test_authoring.md)|The inverse of the Bug Fix pattern: hand the agent the code with its test suite deleted and ask it to write one, then grade the suite by mutation testing - the harness applies small behavioural faults to the module and scores the fraction the agent's tests catch|inflection_test_writing|
-|[Scorer Authoring](docs/eval_patterns/eval_generator.md)|Ask an agent to write a scoring routine that discriminates a correct implementation of a small task from incorrect ones, without ever seeing the held-out solutions|eval_generator|
-|[Terminal Task](docs/eval_patterns/terminal_task.md)|Grade whether an agent leaves a realistic terminal environment in the required final state, outcome-only scoring against the live container state, using an eval-owned Dockerfile as the task environment|repair_nginx_service|
+The human-readable pattern guides live with the eval-creation skill so the same documents are
+included when that skill is installed:
+
+- [Search with Questions and Answers][search-pattern] — search a knowledge base and answer
+  multiple-choice questions in JSON; demonstrates MCP (`encode_repo_forgetful`).
+- [Bug Fix with Automated Tests][bug-fix-pattern] — fix failing repository tests while the scorer
+  restores the authoritative suite (`inflection_bug_fix`).
+- [Schema Field Mapping][mapping-pattern] — produce a scored CSV mapping between two data models
+  (`saleor_spree_mapping`).
+- [New Feature with Automated Tests][new-feature-pattern] — implement a fixed API against hidden
+  score-time tests; demonstrates a Rust-enabled image (`chess_engine`).
+- [Test Authoring][test-authoring-pattern] — write tests graded through mutation testing
+  (`inflection_test_writing`).
+- [Scorer Authoring][scorer-authoring-pattern] — write a scorer that distinguishes held-out correct
+  and incorrect implementations (`eval_generator`).
+- [Terminal Task][terminal-task-pattern] — leave a container in a required final state, graded
+  through outcome-only checks (`repair_nginx_service`).
+
+[search-pattern]: skills/eval_creation/references/eval_patterns/search_with_qa.md
+[bug-fix-pattern]: skills/eval_creation/references/eval_patterns/bug_fix.md
+[mapping-pattern]: skills/eval_creation/references/eval_patterns/schema_field_mapping.md
+[new-feature-pattern]: skills/eval_creation/references/eval_patterns/new_feature.md
+[test-authoring-pattern]: skills/eval_creation/references/eval_patterns/test_authoring.md
+[scorer-authoring-pattern]: skills/eval_creation/references/eval_patterns/eval_generator.md
+[terminal-task-pattern]: skills/eval_creation/references/eval_patterns/terminal_task.md
 
 # Getting Started
 

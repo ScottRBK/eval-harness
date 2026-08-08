@@ -1,4 +1,4 @@
-# [Schema Field Mapping](../../example_evals/saleor_spree_mapping)
+# [Schema Field Mapping](https://github.com/ScottRBK/eval-harness/tree/main/example_evals/saleor_spree_mapping)
 
 This eval measures two things:
 1. The ability of an agent to read two unfamiliar codebases and reason about how their data models
@@ -29,10 +29,10 @@ saleor_field,spree_field,transform
 
 The neat part of this pattern is that one fixture does double duty - it is both the scaffold we hand
 the agent and the answer key we grade against - and we get both out of it with the
-[`read_mapping`](../helpers.md) helper. Called with a list of columns to blank it returns the
+[`read_mapping`](https://github.com/ScottRBK/eval-harness/blob/main/docs/helpers.md) helper. Called with a list of columns to blank it returns the
 **masked** scaffold (the `saleor_field` column populated, `spree_field` and `transform` emptied)
 that seeds the agent's working file; called with no mask it returns the **full** mapping used for
-scoring (see [embedded values](../../README.md#embedded-values)).
+scoring (see [embedded values](https://github.com/ScottRBK/eval-harness/blob/main/README.md#embedded-values)).
 
 > [!TIP]
 > `read_mapping` is *fail-closed*: if you ask it to blank a column that isn't in the CSV header it
@@ -89,7 +89,7 @@ with open("/workspace/mapping.csv", "w") as f:
 
 ### act
 Act is a thin, single-prompt call. We point the shell at the workspace and hand it the
-[mapping prompt](../../example_evals/saleor_spree_mapping/fixtures/mapping_prompt.md), which tells
+[mapping prompt](https://github.com/ScottRBK/eval-harness/blob/main/example_evals/saleor_spree_mapping/fixtures/mapping_prompt.md), which tells
 the agent where each schema lives, what the three columns mean, the exact four `transform` values to
 choose from, and - importantly - not to add, remove, or reorder rows, only to fill the two empty
 cells. That last instruction is the other half of the template-fill design: the masking only holds

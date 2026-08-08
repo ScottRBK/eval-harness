@@ -1,4 +1,4 @@
-# [Scorer Authoring](../../example_evals/eval_generator)
+# [Scorer Authoring](https://github.com/ScottRBK/eval-harness/tree/main/example_evals/eval_generator)
 
 This eval measures an agent's ability to:
 
@@ -35,8 +35,8 @@ themselves are staged in `score()`, after the agent has finished its work.
 > configuration.
 
 The values each phase needs are a mix of directory paths and files pulled from the eval's
-`fixtures/` directory via [`read_eval_fixture`](../helpers.md) — the prompt for `act`, and the
-three held-out solutions for `score` (see [embedded values](../../README.md#embedded-values)).
+`fixtures/` directory via [`read_eval_fixture`](https://github.com/ScottRBK/eval-harness/blob/main/docs/helpers.md) — the prompt for `act`, and the
+three held-out solutions for `score` (see [embedded values](https://github.com/ScottRBK/eval-harness/blob/main/README.md#embedded-values)).
 
 ```python
 arrange_embedded_values = {
@@ -95,7 +95,7 @@ response = await shell.execute(
 )
 ```
 
-The [prompt](../../example_evals/eval_generator/fixtures/prompt.md) tells the agent exactly what
+The [prompt](https://github.com/ScottRBK/eval-harness/blob/main/example_evals/eval_generator/fixtures/prompt.md) tells the agent exactly what
 bracket types to handle, what the `REPO_DIR` contract is, and what output format is expected. It
 contains no link to the eval-harness repository and no hint about what the held-out solutions look
 like — the agent derives its tests purely from the specification.

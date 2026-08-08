@@ -1,4 +1,4 @@
-# [New Feature with Automated Tests](../../example_evals/chess_engine)
+# [New Feature with Automated Tests](https://github.com/ScottRBK/eval-harness/tree/main/example_evals/chess_engine)
 
 This eval measures two things:
 1. The ability of an agent to implement a non-trivial new feature against a fixed, pre-defined API
@@ -46,8 +46,8 @@ ENV PATH=/home/node/.cargo/bin:$PATH
 ```
 
 The values each phase needs are a mix of inline repo coordinates and files pulled from the eval's
-`fixtures/` directory via [`read_eval_fixture`](../helpers.md) - the prompt for `act`, and the
-hidden test file for `score` (see [embedded values](../../README.md#embedded-values)). Note the
+`fixtures/` directory via [`read_eval_fixture`](https://github.com/ScottRBK/eval-harness/blob/main/docs/helpers.md) - the prompt for `act`, and the
+hidden test file for `score` (see [embedded values](https://github.com/ScottRBK/eval-harness/blob/main/README.md#embedded-values)). Note the
 `image` attribute sits right alongside them on the class body.
 
 ```python
@@ -109,7 +109,7 @@ Run `gh auth setup-git` before the fetch when the private-repository token is pr
 
 ### act
 We build an `AgentShell` and hand it the
-[prompt](../../example_evals/chess_engine/fixtures/prompt.md) fixture. That prompt spells out the
+[prompt](https://github.com/ScottRBK/eval-harness/blob/main/example_evals/chess_engine/fixtures/prompt.md) fixture. That prompt spells out the
 API contract in the agent's own terms: keep the `Board` and `Move` names and the three exact
 signatures (the hidden tests compile against them), standard library only, Rust only. It is the
 agent-facing mirror of the anti-cheat logic that `score` enforces.

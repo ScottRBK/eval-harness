@@ -1,4 +1,4 @@
-# [Terminal Task](../../example_evals/repair_nginx_service)
+# [Terminal Task](https://github.com/ScottRBK/eval-harness/tree/main/example_evals/repair_nginx_service)
 
 This eval pattern grades whether an agent leaves a realistic terminal environment in the required
 final state. It evaluates **outcomes** — not commands, reasoning, console output, or a prescribed

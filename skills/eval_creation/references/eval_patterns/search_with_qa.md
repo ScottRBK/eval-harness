@@ -1,4 +1,4 @@
-# [Search with Questions and Answers](../../example_evals/encode_repo_forgetful)
+# [Search with Questions and Answers](https://github.com/ScottRBK/eval-harness/tree/main/example_evals/encode_repo_forgetful)
 
 This eval measures two things:
 1. The ability of an agent to encode information about a github repo in to a knowledge base.
@@ -14,7 +14,7 @@ When building a similar evaluation, then you will want to use a private reposito
 > To point this eval at a **private** repository, set `EVAL_HARNESS_GITHUB_TOKEN` in `.env` to a
 > token that can read it. The harness injects it into the container as `GH_TOKEN`, and the clone in
 > `arrange()` runs `gh auth setup-git` (guarded on the token being present) so the HTTPS `git clone`
-> authenticates. See [authorisation](../authorisation.md#private-repositories-harness-level-github-token)
+> authenticates. See [authorisation](https://github.com/ScottRBK/eval-harness/blob/main/docs/authorisation.md#private-repositories-harness-level-github-token)
 > for details. Leaving the token unset keeps public-repo clones working anonymously.
 
 For the knowledge base I am using the [forgetful](https://github.com/ScottRBK/forgetful) which is my
@@ -86,10 +86,10 @@ subprocess.run(
 ```
 
 Once we have the repo cloned we then call agent shell passing the agent information along with our
-encoding prompt, which we populated at the top of the file using a [`read_eval_fixture`](../helpers.md) 
-helper from our [embedded-values](../../README.md#embedded-values). 
+encoding prompt, which we populated at the top of the file using a [`read_eval_fixture`](https://github.com/ScottRBK/eval-harness/blob/main/docs/helpers.md)
+helper from our [embedded-values](https://github.com/ScottRBK/eval-harness/blob/main/README.md#embedded-values).
 
-The [encoding prompt](../../example_evals/encode_repo_forgetful/fixtures/encoding_prompt.md) is a 
+The [encoding prompt](https://github.com/ScottRBK/eval-harness/blob/main/example_evals/encode_repo_forgetful/fixtures/encoding_prompt.md) is a
 mark down file with instructions telling the agent how they should encode a repo into the forgetful 
 knowledge base. 
 
@@ -112,7 +112,7 @@ subprocess.run(["rm", "-rf", REPO_DIR], check=True)
 ### act
 
 The first thing we do in act is take the `QUESTIONS` file that we have generated using the 
-[`read_questions`](../helpers.md) helper in the embedded values for act and then write that to a file
+[`read_questions`](https://github.com/ScottRBK/eval-harness/blob/main/docs/helpers.md) helper in the embedded values for act and then write that to a file
 in the workspace of the container called `answers.json`. When we declare the variable and populate it 
 using the `read_questions` helper we set the `include_answers` boolean to false, ensuring the file
 does not have any of the answers populated and in addition to this the source and notes columns are 
