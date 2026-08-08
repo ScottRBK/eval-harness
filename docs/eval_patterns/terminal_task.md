@@ -56,13 +56,22 @@ files belong under `fixtures/image/`.
 
 ## Task acceptance criteria
 
-A good terminal task must satisfy three Terminal-Bench criteria:
+A good terminal task must satisfy three Terminal-Bench criteria and four harness integrity checks:
 
 - **Specificity:** the instruction and hidden tests describe the same acceptable outcomes. If the
   instruction says "a custom error page", the tests must verify a custom page exists — they must not
   check for a specific string the agent could not have known about.
 - **Solvability:** the oracle solution passes all hidden tests. Validate this during authoring.
 - **Integrity:** a no-op (doing nothing) and obvious shortcuts (e.g. a non-Nginx server) fail.
+- **Isolation:** the hidden tests, instruction, and oracle remain outside the Docker build context
+  (`fixtures/image/`), and the hidden tests and oracle remain absent during `act`.
+- **Determinism:** repeated no-op and oracle checks produce the same result.
+- **Scoring:** all checks passing produces `EVAL_SCORE=1.0`; any candidate failure produces
+  `EVAL_SCORE=0.0`. Evaluator and fixture defects raise so the run is marked FAILED.
+- **Supply chain:** every package installed in the task image has an audit covering its source,
+  signing, and known vulnerabilities. Record that audit in this pattern documentation.
+
+The task is ready only when all seven checks have evidence from the actual eval image.
 
 ## Evaluation Details
 

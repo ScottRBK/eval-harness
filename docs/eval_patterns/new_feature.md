@@ -70,6 +70,13 @@ score_embedded_values = {
 }
 ```
 
+## Authoring gate
+
+Before adapting this pattern, complete the
+[new-feature authoring gate](./new_feature_authoring_gate.md). Its proof matrix covers prompt-test
+fairness, normalized feature and regression scoring, authoritative score fixtures, public solution
+leaks, and validation in the actual eval image.
+
 ## Evaluation Details
 
 ### arrange
@@ -86,6 +93,19 @@ subprocess.run(
 )
 subprocess.run(["git", "-C", REPO_DIR, "remote", "remove", "origin"])
 ```
+
+`git clone --branch` accepts branch and tag names, not a raw commit SHA. When the pre-feature state
+is pinned by SHA, initialise the repository and fetch that object directly instead:
+
+```text
+git init <repo-dir>
+git -C <repo-dir> remote add origin <repo-url>
+git -C <repo-dir> fetch --depth 1 origin <sha>
+git -C <repo-dir> checkout FETCH_HEAD
+git -C <repo-dir> remote remove origin
+```
+
+Run `gh auth setup-git` before the fetch when the private-repository token is present.
 
 ### act
 We build an `AgentShell` and hand it the
