@@ -22,7 +22,7 @@ from src.models import (
     EvalSession,
 )
 from src.config.settings import Settings, settings
-from src.helpers.tui import wait_for_selection
+from src.helpers.tui import wait_for_selection, wait_for_keypress
 from src.evals_engine import (
     get_results_filename,
     run_evals,
@@ -150,6 +150,11 @@ class Execution:
         )
         results_service.export(aees=agent_eval_executions)
         print("results file saved")
+
+        wait_for_keypress(
+            terminal=self._terminal,
+            render=lambda: print("\nPress any key to return to the menu... (wheres the any key?)") 
+        )
 
 
 class LiveStatus:

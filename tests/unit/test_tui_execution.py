@@ -52,3 +52,39 @@ def test_select_eval_config_returns_when_no_configs(tmp_path, eval_configs):
         style=PALETTE["label"],
     )
     wait_for_selection.assert_not_called()
+
+
+def test_select_eval_config_waits_for_keypress_after_saving_results(tmp_path):
+    # Arrange
+    console = MagicMock()
+    execution = Execution(
+        terminal=MagicMock(),
+        console=console,
+        app_settings=SimpleNamespace(EVAL_CONFIG_DIR=str(tmp_path)),
+    )
+    config_file = tmp_path / "a.json"
+    config_file.write_text("{}")
+    execution._eval_configs = [config_file]
+
+    fake_session = SimpleNamespace(run_dir=tmp_path)
+    calls: list[str] = []
+
+    # Act
+    with (
+        patch("src.tui.execution.print"),
+        patch("src.tui.execution.wait_for_selection", return_value=0),
+        patch("src.tui.execution.build_eval_session", return_value=fake_session),
+        patch("src.tui.execution.build_agent_eval_executions", return_value=[]),
+        patch("src.tui.execution.LiveStatus"),
+        patch("src.tui.execution.run_evals", return_value=[]),
+        patch("src.tui.execution.get_results_service") as results_service,
+        patch("src.tui.execution.wait_for_keypress") as wait_for_keypress,
+    ):
+        results_service.return_value.export.side_effect = lambda **_: calls.append("export")
+        wait_for_keypress.side_effect = lambda **_: calls.append("pause")
+
+        execution.select_eval_config()
+
+    # Assert
+    assert calls == ["export", "pause"]
+    wait_for_keypress.assert_called_once()
