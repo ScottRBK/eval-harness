@@ -38,15 +38,18 @@ RUN curl -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh && \
 ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
 RUN uv python install 3.12 && \
     uv venv /opt/venv --python 3.12 && \
-    uv pip install --python /opt/venv/bin/python agent-shell-py
-ENV PATH="/opt/venv/bin:${PATH}"
+    uv pip install --python /opt/venv/bin/python 'agent-shell-py>=0.2.5'
+ENV PATH="/opt/venv/bin:/home/node/.local/bin:/home/node/.grok/bin:${PATH}"
 
 # npm global prefix relocated so non-root `node` user can install globals
 RUN mkdir -p /usr/local/share/npm-global && \
     chown -R node:node /usr/local/share
 
-RUN mkdir -p /workspace /home/node/.claude /home/node/.local/share/opencode /home/node/.pi/agent && \
-    chown -R node:node /workspace /home/node/.claude /home/node/.local /home/node/.pi
+RUN mkdir -p /workspace /home/node/.claude /home/node/.local/share/opencode \
+        /home/node/.pi/agent /home/node/.grok /home/node/.cursor \
+        /home/node/.config/cursor && \
+    chown -R node:node /workspace /home/node/.claude /home/node/.local /home/node/.pi \
+        /home/node/.grok /home/node/.cursor /home/node/.config/cursor
 
 WORKDIR /workspace
 
@@ -55,8 +58,17 @@ USER node
 ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
 ENV PATH=$PATH:/usr/local/share/npm-global/bin
 
+# opencode-ai's postinstall currently mis-detects glibc images as musl and fails
+# with EBADPLATFORM. Install the wrapper without scripts, then the glibc binary.
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} && \
-    npm install -g opencode-ai@${OPENCODE_VERSION} && \
+    npm install -g --ignore-scripts opencode-ai@${OPENCODE_VERSION} && \
+    npm install -g opencode-linux-x64@${OPENCODE_VERSION} && \
     npm install -g @github/copilot@${COPILOT_VERSION} && \
     npm install -g @openai/codex@${CODEX_VERSION} && \
-    npm install -g --ignore-scripts @earendil-works/pi-coding-agent@${PI_VERSION}
+    npm install -g --ignore-scripts @earendil-works/pi-coding-agent@${PI_VERSION} && \
+    curl -fsSL https://cursor.com/install -o /tmp/cursor-install.sh && \
+    bash /tmp/cursor-install.sh && \
+    rm /tmp/cursor-install.sh && \
+    curl -fsSL https://x.ai/cli/install.sh -o /tmp/grok-install.sh && \
+    bash /tmp/grok-install.sh && \
+    rm /tmp/grok-install.sh

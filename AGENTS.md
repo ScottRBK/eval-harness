@@ -2,7 +2,8 @@
 
 ## What this is
 
-A Python framework that runs CLI coding agents (Claude Code, OpenCode, Copilot CLI, Codex, Pi)
+A Python framework that runs CLI coding agents (Claude Code, OpenCode, Copilot CLI, Codex, Pi,
+Cursor, Grok)
 inside Docker containers and grades their work.
 
 ## Commands
@@ -57,7 +58,8 @@ configuration should be committed. Headless execution requires `--run_eval` and 
 Each example evaluation maps to a pattern documented in
 `skills/eval_creation/references/eval_patterns`.
 Pi has no native MCP support, so it cannot run MCP-backed evaluations such as
-`encode_repo_forgetful`.
+`encode_repo_forgetful`. Cursor MCP add/remove/list is supported (AgentShell edits
+`~/.cursor/mcp.json`); Cursor still has no per-call `disallowed_tools`.
 
 Any change to the eval architecture or its constraints (the protocol, method extraction, embedded
 values) must include a review and update of README.md, AGENTS.md and the skills under `skills/`.
@@ -68,7 +70,7 @@ There is a `session.log` as well as a per agent log file.
 
 ## Status
 
-Working: Claude Code, OpenCode, Copilot, Codex, Pi
+Working: Claude Code, OpenCode, Copilot, Codex, Pi, Cursor, Grok
 
 ## Repo Specific Instructions
 As a general rule, do not implement code automatically - the maintainer of this repository is a dinosaur

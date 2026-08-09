@@ -302,6 +302,37 @@ class TestProvisionAgent:
         with pytest.raises(RuntimeError):
             runner._provision_agent()
 
+    def test_grok_provisions_auth_volume_not_environment(self, tmp_path, monkeypatch):
+        # Arrange
+        auth = tmp_path / "grok" / "auth.json"
+        auth.parent.mkdir()
+        auth.write_text('{"grok": true}')
+        monkeypatch.setattr("src.docker_runner.settings.GROK_CREDENTIALS_LOC", str(auth))
+        runner = DockerRunner(AgentType.GROK, "model")
+
+        # Act
+        prov = runner._provision_agent()
+
+        # Assert — file bind (not dir) so the image's ~/.grok/bin stays visible
+        assert prov.environment == {}
+        assert len(prov.volumes) == 1
+        staged_path = Path(next(iter(prov.volumes)))
+        assert next(iter(prov.volumes.values())) == {
+            "bind": "/home/node/.grok/auth.json",
+            "mode": "rw",
+        }
+        assert staged_path.read_text() == '{"grok": true}'
+
+    def test_grok_without_auth_file_raises_clear_error(self, tmp_path, monkeypatch):
+        # Arrange
+        missing = tmp_path / "missing-grok-auth.json"
+        monkeypatch.setattr("src.docker_runner.settings.GROK_CREDENTIALS_LOC", str(missing))
+        runner = DockerRunner(AgentType.GROK, "model")
+
+        # Act / Assert
+        with pytest.raises(RuntimeError, match=r"Grok auth file not found.*missing-grok-auth"):
+            runner._provision_agent()
+
     def test_pi_provisions_auth_volume_not_environment(self, pi_creds):
         # Arrange
         runner = DockerRunner(AgentType.PI, "model")
@@ -368,6 +399,44 @@ class TestProvisionAgent:
 
         # Act / Assert
         with pytest.raises(RuntimeError):
+            runner._provision_agent()
+
+    def test_cursor_provisions_api_key_as_environment(self, monkeypatch):
+        # Arrange
+        monkeypatch.setattr("src.docker_runner.settings.CURSOR_API_KEY", "cursor-key")
+        monkeypatch.setattr("src.docker_runner.settings.CURSOR_AUTH_TOKEN", "")
+        runner = DockerRunner(AgentType.CURSOR, "model")
+
+        # Act
+        prov = runner._provision_agent()
+
+        # Assert
+        assert prov.environment == {"CURSOR_API_KEY": "cursor-key"}
+        assert prov.volumes == {}
+
+    def test_cursor_provisions_auth_token_as_environment(self, monkeypatch):
+        # Arrange — OAuth login path (no API key)
+        monkeypatch.setattr("src.docker_runner.settings.CURSOR_API_KEY", "")
+        monkeypatch.setattr(
+            "src.docker_runner.settings.CURSOR_AUTH_TOKEN", "cursor-oauth-token"
+        )
+        runner = DockerRunner(AgentType.CURSOR, "model")
+
+        # Act
+        prov = runner._provision_agent()
+
+        # Assert
+        assert prov.environment == {"CURSOR_AUTH_TOKEN": "cursor-oauth-token"}
+        assert prov.volumes == {}
+
+    def test_cursor_without_credentials_raises_clear_error(self, monkeypatch):
+        # Arrange
+        monkeypatch.setattr("src.docker_runner.settings.CURSOR_API_KEY", "")
+        monkeypatch.setattr("src.docker_runner.settings.CURSOR_AUTH_TOKEN", "")
+        runner = DockerRunner(AgentType.CURSOR, "model")
+
+        # Act / Assert
+        with pytest.raises(RuntimeError, match="Cursor credentials not configured"):
             runner._provision_agent()
 
     def test_copilot_provisions_token_as_environment(self, copilot_token):

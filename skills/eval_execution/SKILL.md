@@ -2,7 +2,8 @@
 name: running-eval-harness-evaluations
 description: >-
     Run evaluations with the eval-harness framework. Use when asked to run, execute, benchmark or
-    compare CLI coding agents (Claude Code, OpenCode, Copilot, Codex, Pi) on existing evals.
+    compare CLI coding agents (Claude Code, OpenCode, Copilot, Codex, Pi, Cursor, Grok) on
+    existing evals.
 ---
 
 # Overview
@@ -43,8 +44,9 @@ composing a run:
   ungrouped agents run in parallel up to `EVAL_HARNESS_MAX_AGENT_CONCURRENCY`.
 - OpenCode models must exist as `provider/model` in
   `src/docker/configs/opencode/opencode.json`.
-- Pi has no native MCP support, so it cannot be included in a run of an MCP-backed evaluation such
-  as `encode_repo_forgetful`.
+- Pi has no native MCP support, so exclude it from MCP-backed evaluations such as
+  `encode_repo_forgetful`. Cursor MCP works via AgentShell; Cursor still cannot enforce
+  per-call `disallowed_tools`.
 
 ## Launch
 Start the interactive TUI to choose a configuration from `EVAL_CONFIG_DIR`:

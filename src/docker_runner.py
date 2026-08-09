@@ -118,6 +118,36 @@ class DockerRunner:
                 files.append(candidate)
         return AgentProvisioning(volumes=self._staged_mount(files, "/home/node/.pi/agent"))
 
+    def _setup_grok(self) -> AgentProvisioning:
+        # Grok's installer puts the binary at ~/.grok/bin. Stage auth as a *file*
+        # bind so we do not shadow that directory (a dir mount would hide `grok`).
+        auth = Path(settings.GROK_CREDENTIALS_LOC).expanduser()
+        if not auth.exists():
+            raise RuntimeError(f"Grok auth file not found at {auth} (run `grok login` on the host)")
+        staging = Path(tempfile.mkdtemp(prefix="eval-mount-"))
+        os.chmod(staging, 0o777)  # noqa: S103 - required for cross-UID Docker binds
+        staged = staging / auth.name
+        shutil.copy2(auth, staged)
+        os.chmod(staged, 0o644)
+        self._temp_dirs.append(staging)
+        return AgentProvisioning(
+            volumes={str(staged): {"bind": "/home/node/.grok/auth.json", "mode": "rw"}}
+        )
+
+    def _setup_cursor(self) -> AgentProvisioning:
+        # Cursor accepts either an API key or an OAuth access token from `cursor-agent login`.
+        environment = {}
+        if settings.CURSOR_API_KEY:
+            environment["CURSOR_API_KEY"] = settings.CURSOR_API_KEY
+        if settings.CURSOR_AUTH_TOKEN:
+            environment["CURSOR_AUTH_TOKEN"] = settings.CURSOR_AUTH_TOKEN
+        if not environment:
+            raise RuntimeError(
+                "Cursor credentials not configured (set EVAL_HARNESS_CURSOR_API_KEY "
+                "or EVAL_HARNESS_CURSOR_AUTH_TOKEN)"
+            )
+        return AgentProvisioning(environment=environment)
+
     def _setup_copilot(self) -> AgentProvisioning:
         if not settings.COPILOT_GITHUB_TOKEN:
             raise RuntimeError(
@@ -159,6 +189,10 @@ class DockerRunner:
                 return self._setup_codex()
             case AgentType.PI:
                 return self._setup_pi()
+            case AgentType.GROK:
+                return self._setup_grok()
+            case AgentType.CURSOR:
+                return self._setup_cursor()
             case AgentType.COPILOT_CLI:
                 return self._setup_copilot()
             case _:

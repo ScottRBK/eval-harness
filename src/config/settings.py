@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     OPENCODE_CREDENTIALS_LOC: str = "~/.local/share/opencode/auth.json"
     CODEX_CREDENTIALS_LOC: str = "~/.codex/auth.json"
     PI_CREDENTIALS_LOC: str = "~/.pi/agent/auth.json"
+    GROK_CREDENTIALS_LOC: str = "~/.grok/auth.json"
+    CURSOR_API_KEY: str = ""
+    # OAuth access token from `cursor-agent login` / ~/.config/cursor/auth.json
+    CURSOR_AUTH_TOKEN: str = ""
     COPILOT_GITHUB_TOKEN: str = ""
     GITHUB_TOKEN: str = ""
     AZURE_DEVOPS_PAT: str = ""

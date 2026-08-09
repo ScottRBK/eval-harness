@@ -11,8 +11,14 @@ The following agent harnesses are currently supported:
 - [x] Copilot
 - [x] Codex
 - [x] Pi
+- [x] Cursor
+- [x] Grok
 
-A lot of this is possible thanks to the agentic harness abstraction repository 
+Agent limits worth knowing: Pi has no native MCP support. Cursor MCP add/remove/list works
+through AgentShell (`~/.cursor/mcp.json`), but Cursor still has no per-call
+`disallowed_tools` (tool policy lives in `.cursor/cli.json`).
+
+A lot of this is possible thanks to the agentic harness abstraction repository
 [agent-shell](https://github.com/ScottRBK/agent-shell), check it out if you have use cases where you 
 want to seemlessly switch between agentic harness for a particular worklow that you invoke via code 
 or scripts. It was originally inspired for auto-research type loops but I've come to find many an 

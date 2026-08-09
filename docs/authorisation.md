@@ -17,11 +17,15 @@ the `EVAL_HARNESS_` prefix (so the Codex row's setting is `EVAL_HARNESS_CODEX_CR
 | OpenCode    | Mounted auth file  | `opencode auth login` | `OPENCODE_CREDENTIALS_LOC`|
 | Codex       | Mounted auth file  | `codex login`         | `CODEX_CREDENTIALS_LOC`   |
 | Pi          | Mounted auth file  | `pi`, then `/login`    | `PI_CREDENTIALS_LOC`      |
+| Cursor      | API key or OAuth (env) | Cursor API key or `cursor-agent login` token | `CURSOR_API_KEY` / `CURSOR_AUTH_TOKEN` |
+| Grok        | Mounted auth file  | `grok login`           | `GROK_CREDENTIALS_LOC`     |
 | Copilot CLI | GitHub token (env) | fine-grained PAT[^1]  | `COPILOT_GITHUB_TOKEN`    |
 
 **Mounted auth file** — the harness stages a throwaway copy of the host auth file and bind-mounts it
 into the container (OpenCode to `/home/node/.local/share/opencode`, Codex to `/home/node/.codex`,
-Pi to `/home/node/.pi/agent`). For Pi, sibling `models.json` and `models-store.json` are staged
+Pi to `/home/node/.pi/agent`, Grok as the single file `/home/node/.grok/auth.json` so the
+image's `~/.grok/bin` install is not shadowed). For Pi, sibling `models.json` and
+`models-store.json` are staged
 alongside `auth.json` when present, so custom providers defined on the host are visible inside the
 container.
 The agent may refresh the token in place during the run; the copy is discarded afterwards, so the
@@ -29,7 +33,9 @@ host file is never touched. The `*_CREDENTIALS_LOC` setting is a path and defaul
 standard location, so you usually need not set it.
 
 **Token (env)** — the harness injects the credential as a container environment variable. Claude
-Code's `setup-token` mints a long-lived OAuth token; for Copilot you supply a GitHub token.
+Code's `setup-token` mints a long-lived OAuth token; for Copilot you supply a GitHub token. Cursor
+accepts either `CURSOR_API_KEY` or an OAuth access token via `CURSOR_AUTH_TOKEN`
+(from `cursor-agent login` / `~/.config/cursor/auth.json`).
 
 A missing credential fails fast at provisioning with a clear error before any container starts.
 

@@ -28,6 +28,26 @@ print('claude provisioning visible')
 """,
     ),
     (
+        AgentType.CURSOR,
+        "provision-cursor",
+        """
+import os
+assert os.environ['AGENT_TYPE'] == 'cursor'
+assert os.environ['AGENT_MODEL'] == 'provision-cursor'
+assert os.environ['CURSOR_API_KEY'] == 'fake-cursor-key'
+print('cursor provisioning visible')
+""",
+    ),
+    (
+        AgentType.GROK,
+        "provision-grok",
+        """
+from pathlib import Path
+assert Path('/home/node/.grok/auth.json').read_text() == '{"grok": true}'
+print('grok provisioning visible')
+""",
+    ),
+    (
         AgentType.COPILOT_CLI,
         "provision-copilot",
         """
@@ -96,11 +116,14 @@ def test_agent_provisioning_is_visible_inside_real_container(
     codex_auth = tmp_path / "codex" / "auth.json"
     pi_auth = tmp_path / "pi" / "auth.json"
     opencode_auth = tmp_path / "opencode" / "auth.json"
+    grok_auth = tmp_path / "grok" / "auth.json"
     codex_auth.parent.mkdir()
     pi_auth.parent.mkdir()
     opencode_auth.parent.mkdir()
+    grok_auth.parent.mkdir()
     codex_auth.write_text('{"codex": true}')
     pi_auth.write_text('{"pi": true}')
+    grok_auth.write_text('{"grok": true}')
     pi_auth.parent.joinpath("models.json").write_text('{"providers": {}}')
     pi_auth.parent.joinpath("models-store.json").write_text('{"opencode-go": {}}')
     opencode_auth.write_text('{"opencode": true}')
@@ -111,6 +134,14 @@ def test_agent_provisioning_is_visible_inside_real_container(
     monkeypatch.setattr(
         "src.docker_runner.settings.COPILOT_GITHUB_TOKEN",
         "fake-copilot-token",
+    )
+    monkeypatch.setattr(
+        "src.docker_runner.settings.CURSOR_API_KEY",
+        "fake-cursor-key",
+    )
+    monkeypatch.setattr(
+        "src.docker_runner.settings.GROK_CREDENTIALS_LOC",
+        str(grok_auth),
     )
     monkeypatch.setattr(
         "src.docker_runner.settings.CODEX_CREDENTIALS_LOC",

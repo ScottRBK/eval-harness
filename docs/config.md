@@ -15,6 +15,9 @@ prefixed with `EVAL_HARNESS_`
 |`OPENCODE_CREDENTIALS_LOC`|string|Path to the OpenCode `auth.json`; it is copied and mounted into the container for OpenCode agents|`~/.local/share/opencode/auth.json`|
 |`CODEX_CREDENTIALS_LOC`|string|Path to the Codex `auth.json` (from `codex login`); a throwaway copy is mounted into the container so Codex can refresh the token without touching the host file|`~/.codex/auth.json`|
 |`PI_CREDENTIALS_LOC`|string|Path to Pi's `auth.json`; it is copied and mounted into the container for Pi agents, along with sibling `models.json`/`models-store.json` when present (custom providers defined on the host are visible inside the container)|`~/.pi/agent/auth.json`|
+|`CURSOR_API_KEY`|string|Cursor API key, passed to the container as `CURSOR_API_KEY`||
+|`CURSOR_AUTH_TOKEN`|string|Cursor OAuth access token (from `cursor-agent login`), passed as `CURSOR_AUTH_TOKEN`. Either this or `CURSOR_API_KEY` is enough||
+|`GROK_CREDENTIALS_LOC`|string|Path to Grok's `auth.json`; a throwaway copy is mounted into the container|`~/.grok/auth.json`|
 |`COPILOT_GITHUB_TOKEN`|string|GitHub token for the Copilot CLI agent, passed to the container as an environment variable. See [authorisation](authorisation.md) for the required permissions||
 |`GITHUB_TOKEN`|string|Harness-level GitHub token for cloning private repos inside the container. Injected as `GH_TOKEN`; unset means public-repo clones only. See [authorisation](authorisation.md#private-repositories-harness-level-github-token)||
 |`AZURE_DEVOPS_PAT`|string|Harness-level Azure DevOps PAT for cloning private Azure DevOps repos inside the container. Injected as `ADO_PAT`; unset means clones rely on existing container git credentials||
@@ -81,7 +84,7 @@ the file.
 
 |Field|Type|Description|Example|
 |-----|----|-----------|-------|
-|`agent_type`|string|The CLI agent to run. One of `claude_code`, `opencode`, `copilot_cli`, `codex`, `pi` (`gemini_cli` is not yet implemented)|`opencode`|
+|`agent_type`|string|The CLI agent to run. One of `claude_code`, `opencode`, `copilot_cli`, `codex`, `pi`, `cursor`, `grok` (`gemini_cli` is not yet implemented)|`opencode`|
 |`agent_model`|string|Model identifier for the agent. Agent-specific: `haiku`/`sonnet`/`opus` for `claude_code`; a `provider/model` from the OpenCode config for `opencode`; or Pi's provider/model identifier, such as `openai-codex/gpt-5.4-mini`|`llama.cpp ai/qwen3.6-27b-8Q`|
 |`effort`|string|Optional — reasoning-effort level passed to the agent at runtime via the `AGENT_EFFORT` env var (`claude_code` applies it as `--effort`; Pi maps it to `--thinking`; `opencode` currently accepts but ignores it). Also appended to the agent's log filename and recorded in the results (`agent_effort`), so agents sharing a type and model stay distinguishable|`high`|
 |`processing_group`|string|Optional — agents sharing a group run serially, never concurrently. Ungrouped agents and separate groups run in parallel up to `MAX_AGENT_CONCURRENCY`. Use it to pin agents that share a backend such as a single inference server|`bosman-server`|
@@ -102,8 +105,10 @@ the file.
 ```
 
 OpenCode providers and models are defined in `src/docker/configs/opencode/opencode.json`.
-Pi has no native MCP support, so do not include it in an evaluation that uses MCP, such as
-`encode_repo_forgetful`.
+Pi has no native MCP support, so do not include it in MCP-backed evaluations such as
+`encode_repo_forgetful`. Cursor MCP add/remove/list works via AgentShell (it edits
+`~/.cursor/mcp.json`); Cursor still has no per-call `disallowed_tools` (tool policy lives in
+`.cursor/cli.json`).
 
 ### Running with the TUI
 Start the application without arguments to open the interactive menu:

@@ -2,7 +2,7 @@
 name: creating-eval-harness-evaluations
 description: >-
     Create eval-harness evaluations. Use when the user wants a new evaluation for a CLI coding
-    agent (Claude Code, OpenCode, Copilot, Codex, Pi).
+    agent (Claude Code, OpenCode, Copilot, Codex, Pi, Cursor, Grok).
 ---
 
 # Overview
@@ -50,8 +50,10 @@ and methods cannot reference module-level state, class attributes or each other.
 (via `repr()`) ahead of the method body, so keys must be valid Python identifiers and values must
 be plain literals. Module-level placeholders (e.g. `REPO_URL = ""`) keep linters happy but are
 never shipped to the container.
-1. Pi has no native MCP support. An eval that configures MCP (such as `encode_repo_forgetful`)
-cannot be run with Pi unless it is excluded from that run's agent/eval pairing.
+1. Pi has no native MCP support, so an eval that configures MCP (such as `encode_repo_forgetful`)
+cannot be run with Pi. Cursor MCP add/remove/list is supported by AgentShell (writes
+`~/.cursor/mcp.json`). Cursor still has no per-call `disallowed_tools` — tool policy lives in
+`.cursor/cli.json`, so deny-list evals are not enforceable on Cursor.
 1. An eval may declare either `image` for a manually managed prebuilt image or `dockerfile` for a
 Dockerfile path relative to its eval directory. The Dockerfile's parent is the complete build
 context; keep hidden tests, answers and oracles outside it. Do not declare both attributes.
