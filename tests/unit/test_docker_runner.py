@@ -417,9 +417,7 @@ class TestProvisionAgent:
     def test_cursor_provisions_auth_token_as_environment(self, monkeypatch):
         # Arrange — OAuth login path (no API key)
         monkeypatch.setattr("src.docker_runner.settings.CURSOR_API_KEY", "")
-        monkeypatch.setattr(
-            "src.docker_runner.settings.CURSOR_AUTH_TOKEN", "cursor-oauth-token"
-        )
+        monkeypatch.setattr("src.docker_runner.settings.CURSOR_AUTH_TOKEN", "cursor-oauth-token")
         runner = DockerRunner(AgentType.CURSOR, "model")
 
         # Act
