@@ -60,7 +60,7 @@ class Execution:
         self._eval_configs = self._load_eval_configs(eval_config=self._settings.EVAL_CONFIG_DIR)
 
     def _load_eval_configs(self, eval_config: str) -> list[Path]:
-        config_dir = Path(eval_config)
+        config_dir = Path(eval_config).expanduser()
 
         if not config_dir.is_dir():
             raise ValueError(f"""Invalid evaluation configs directory (env EVAL_HARNESS_EVAL_CONFIG_DIR)

@@ -76,3 +76,8 @@ Working: Claude Code, OpenCode, Copilot, Codex, Pi, Cursor, Grok
 As a general rule, do not implement code automatically - the maintainer of this repository is a dinosaur
 and uses you for Q&A primarily and search. Only implement changes when explicitly instructed to do so.
 
+If you  are asked to commit any changes please ensure you run the following commands if you have 
+not done so already:
+`uv run ruff check`
+`uv run ruff format`
+`uv run pytest -o addopts="--strict-markers"`

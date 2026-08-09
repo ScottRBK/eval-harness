@@ -7,6 +7,29 @@ from src.tui.execution import Execution
 from src.tui.styles import PALETTE
 
 
+def test_execution_expands_home_in_eval_configs_directory(tmp_path, monkeypatch):
+    # Arrange
+    home = tmp_path / "home"
+    configs = home / "configs"
+    configs.mkdir(parents=True)
+    first = configs / "a.json"
+    second = configs / "b.json"
+    first.write_text("{}")
+    second.write_text("{}")
+    (configs / "ignored.txt").write_text("ignored")
+    monkeypatch.setenv("HOME", str(home))
+
+    # Act
+    execution = Execution(
+        terminal=MagicMock(),
+        console=MagicMock(),
+        app_settings=SimpleNamespace(EVAL_CONFIG_DIR="~/configs"),
+    )
+
+    # Assert
+    assert execution._eval_configs == [first, second]
+
+
 @pytest.mark.parametrize("eval_configs", [[], None])
 def test_select_eval_config_returns_when_no_configs(tmp_path, eval_configs):
     # Arrange
