@@ -153,7 +153,7 @@ class Execution:
 
         wait_for_keypress(
             terminal=self._terminal,
-            render=lambda: print("\nPress any key to return to the menu... (wheres the any key?)") 
+            render=lambda: print("\nPress any key to return to the menu... (wheres the any key?)"),
         )
 
 
