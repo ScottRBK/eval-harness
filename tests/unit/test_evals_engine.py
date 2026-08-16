@@ -51,6 +51,7 @@ def _make_aee(
     processing_group=None,
     effort=None,
     run_count=1,
+    eval_retries=0,
 ):
     """An AgentEvalExecution with one pending EvalExecution per eval dir."""
     agent = AgentConfig(
@@ -58,6 +59,7 @@ def _make_aee(
         agent_model=agent_model,
         effort=effort,
         processing_group=processing_group,
+        eval_retries=eval_retries,
     )
     evals = [
         Eval(number=i, eval_dir=d, description=f"desc {d}", run_count=run_count, tags=[])
@@ -612,6 +614,59 @@ class TestRunAgentRunCount:
 
 
 class TestRunAgentFailure:
+    def test_retries_failed_eval_and_uses_successful_result(self, fake_runner, fake_eval_loading):
+        # Arrange
+        fake_eval_loading()
+        recorder = fake_runner([RuntimeError("phase boom"), (0.75, 2.0, 12)])
+        aee = _make_aee(["e1"], eval_retries=1)
+
+        # Act
+        run_agent(aee, Queue())
+
+        # Assert
+        assert len(recorder.calls) == 2
+        assert len(recorder.constructed) == 3  # health probe + one runner per attempt
+        assert aee.status == AgentEvalStatus.COMPLETED
+        assert aee.evals_executions[0].score == 0.75
+        assert aee.evals_executions[0].total_tokens == 12
+
+    def test_records_recovered_retry_and_emits_progress_update(
+        self, fake_runner, fake_eval_loading
+    ):
+        # Arrange
+        fake_eval_loading()
+        fake_runner([TimeoutError("act timed out"), (1.0, 1.0)])
+        aee = _make_aee(["e1"], eval_retries=1)
+        progress: Queue = Queue()
+
+        # Act
+        run_agent(aee, progress)
+
+        # Assert
+        eval_exec = aee.evals_executions[0]
+        assert eval_exec.status == "completed"
+        assert eval_exec.retries_used == 1
+        assert eval_exec.last_error == "TimeoutError: act timed out"
+        assert _drain(progress) == ["update"] * 4
+
+    def test_propagates_final_exception_after_retries_are_exhausted(
+        self, fake_runner, fake_eval_loading
+    ):
+        # Arrange
+        fake_eval_loading()
+        recorder = fake_runner([RuntimeError("first"), ValueError("final")])
+        aee = _make_aee(["e1"], eval_retries=1)
+
+        # Act / Assert
+        with pytest.raises(ValueError, match="final"):
+            run_agent(aee, Queue())
+
+        eval_exec = aee.evals_executions[0]
+        assert len(recorder.calls) == 2
+        assert eval_exec.status == "failed"
+        assert eval_exec.retries_used == 1
+        assert eval_exec.last_error == "ValueError: final"
+
     def test_propagates_runner_exception(self, fake_runner, fake_eval_loading):
         # Arrange — so main's ``f.result()`` re-raises it on the main thread
         fake_eval_loading()
@@ -668,6 +723,29 @@ class TestRunAgentFailure:
 # --------------------------------------------------------------------------- #
 # B2. run_agent — health check integration (UNHEALTHY vs FAILED split)
 # --------------------------------------------------------------------------- #
+
+
+class TestRunAgentRetriesWithRunCount:
+    def test_each_planned_run_has_its_own_retry_allowance(self, fake_runner, fake_eval_loading):
+        # Arrange
+        fake_eval_loading()
+        recorder = fake_runner(
+            [
+                RuntimeError("run one failed"),
+                (0.5, 1.0),
+                TimeoutError("run two timed out"),
+                (1.0, 1.0),
+            ]
+        )
+        aee = _make_aee(["e1"], run_count=2, eval_retries=1)
+
+        # Act
+        run_agent(aee, Queue())
+
+        # Assert
+        assert len(recorder.calls) == 4
+        assert aee.evals_executions[0].score == pytest.approx(0.75)
+        assert aee.evals_executions[0].retries_used == 2
 
 
 class TestRunAgentHealthCheck:

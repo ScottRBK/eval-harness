@@ -1,9 +1,21 @@
+from io import StringIO
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
+from agent_shell.models.agent import AgentType
+from rich.console import Console
 
-from src.tui.execution import Execution
+from src.models import (
+    AgentConfig,
+    AgentEvalExecution,
+    AgentEvalStatus,
+    Eval,
+    EvalExecution,
+    EvalExecutionStatus,
+)
+from src.tui.execution import Execution, LiveStatus
 from src.tui.styles import PALETTE
 
 
@@ -52,6 +64,45 @@ def test_select_eval_config_returns_when_no_configs(tmp_path, eval_configs):
         style=PALETTE["label"],
     )
     wait_for_selection.assert_not_called()
+
+
+def test_live_status_reports_eval_retry_progress():
+    # Arrange
+    agent = AgentConfig(
+        agent_type=AgentType.PI,
+        agent_model="test-model",
+        eval_retries=2,
+    )
+    eval_exec = EvalExecution(
+        id=uuid4(),
+        eval=Eval(
+            number=7,
+            eval_dir="flaky_eval",
+            description="flaky",
+            run_count=1,
+            tags=[],
+        ),
+        agent_config=agent,
+        status=EvalExecutionStatus.RETRYING,
+        retries_used=1,
+        last_error="RuntimeError: act failed",
+    )
+    agent_exec = AgentEvalExecution(
+        agent_config=agent,
+        total_score=0,
+        total_tokens=0,
+        total_time_taken_seconds=0,
+        evals_executions=[eval_exec],
+        status=AgentEvalStatus.PROCESSING,
+    )
+    output = StringIO()
+    console = Console(file=output, force_terminal=False, width=120)
+
+    # Act
+    console.print(LiveStatus([agent_exec])._render())
+
+    # Assert
+    assert "retry e7 1/2" in output.getvalue()
 
 
 def test_select_eval_config_waits_for_keypress_after_saving_results(tmp_path):

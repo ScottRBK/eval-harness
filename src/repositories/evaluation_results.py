@@ -17,6 +17,7 @@ CSV_FIELDNAMES = [
     "agent_type",
     "agent_model",
     "agent_effort",
+    "agent_eval_retries",
     "agent_status",
     "agent_total_score",
     "agent_total_tokens",
@@ -31,6 +32,9 @@ CSV_FIELDNAMES = [
     "eval_total_tokens",
     "eval_time_taken_seconds",
     "eval_date_executed",
+    "eval_status",
+    "eval_retries_used",
+    "eval_last_error",
 ]
 
 
@@ -108,6 +112,9 @@ class CsvEvaluationResultsRepository:
                                 "agent_type": _serialize_cell(aee.agent_config.agent_type),
                                 "agent_model": _serialize_cell(aee.agent_config.agent_model),
                                 "agent_effort": _serialize_cell(aee.agent_config.effort),
+                                "agent_eval_retries": _serialize_cell(
+                                    aee.agent_config.eval_retries
+                                ),
                                 "agent_status": _serialize_cell(aee.status),
                                 "agent_total_score": _serialize_cell(aee.total_score),
                                 "agent_total_tokens": _serialize_cell(aee.total_tokens),
@@ -128,6 +135,9 @@ class CsvEvaluationResultsRepository:
                                     eval_execution.time_taken_seconds
                                 ),
                                 "eval_date_executed": _serialize_cell(eval_execution.date_executed),
+                                "eval_status": _serialize_cell(eval_execution.status),
+                                "eval_retries_used": _serialize_cell(eval_execution.retries_used),
+                                "eval_last_error": _serialize_cell(eval_execution.last_error),
                             }
                         )
         except Exception as e:

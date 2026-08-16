@@ -23,6 +23,7 @@ The nested `agent_config` object:
 |`agent_model`|string|the model the agent used|gpt-5.4-mini|
 |`effort`|string \| null|reasoning-effort level, `null` when not set|high|
 |`processing_group`|string \| null|optional group used to serialise agents that can't run concurrently, `null` when not set|null|
+|`eval_retries`|int|number of retries allowed for each failed eval run|1|
 
 Each entry in `evals_executions` (an `EvalExecution`):
 
@@ -35,6 +36,9 @@ Each entry in `evals_executions` (an `EvalExecution`):
 |`score`|float \| null|the score this eval achieved, `null` until the eval completes|0.8|
 |`time_taken_seconds`|float \| null|wall-clock time for this eval, `null` until the eval completes|95.2|
 |`date_executed`|string (iso8601) \| null|when the eval finished, `null` until the eval completes|2026-06-29T16:17:49|
+|`status`|string|execution status: `pending`, `running`, `retrying`, `completed`, or `failed`|completed|
+|`retries_used`|int|number of retries performed across this eval's configured runs|1|
+|`last_error`|string \| null|most recent failed-attempt error, retained when a retry recovers|null|
 
 The nested `eval` object:
 

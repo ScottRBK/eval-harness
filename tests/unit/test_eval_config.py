@@ -52,6 +52,32 @@ def test_build_eval_session_accepts_valid_config(tmp_path):
     # Assert
     assert len(session.evals) == 1
     assert len(session.agents) == 1
+    assert session.agents[0].eval_retries == 0
+
+
+def test_build_eval_session_accepts_agent_eval_retries(tmp_path):
+    # Arrange
+    config = _valid_config()
+    config["agents"][0]["eval_retries"] = 2
+    config_path = _write_config(tmp_path, config)
+
+    # Act
+    session = build_eval_session(config_path, ResultFormat.JSON)
+
+    # Assert
+    assert session.agents[0].eval_retries == 2
+
+
+@pytest.mark.parametrize("value", [-1, True, 1.5, "1"])
+def test_build_eval_session_rejects_invalid_agent_eval_retries(tmp_path, value):
+    # Arrange
+    config = _valid_config()
+    config["agents"][0]["eval_retries"] = value
+    config_path = _write_config(tmp_path, config)
+
+    # Act / Assert
+    with pytest.raises(ValueError, match=r"agents\[0\].eval_retries.*non-negative integer"):
+        build_eval_session(config_path, ResultFormat.JSON)
 
 
 def test_build_eval_session_reports_invalid_json(tmp_path):

@@ -23,6 +23,7 @@ from src.models import (
     AgentConfig,
     AgentEvalExecution,
     AgentEvalStatus,
+    EvalExecutionStatus,
     Eval,
     EvalExecution,
     EvalSession,
@@ -139,7 +140,7 @@ def get_results_service(result_format: ResultFormat, run_dir: Path) -> Evaluatio
 
 _CONFIG_KEYS = {"evals", "agents"}
 _EVAL_KEYS = {"number", "eval_dir", "description", "run_count", "tags"}
-_AGENT_KEYS = {"agent_type", "agent_model", "effort", "processing_group"}
+_AGENT_KEYS = {"agent_type", "agent_model", "effort", "processing_group", "eval_retries"}
 
 
 def _configuration_error(eval_file: Path, location: str, message: str) -> ValueError:
@@ -199,6 +200,12 @@ def _validate_string(
 def _validate_positive_integer(value: object, *, eval_file: Path, location: str) -> int:
     if type(value) is not int or value < 1:
         raise _configuration_error(eval_file, location, "must be a positive integer")
+    return value
+
+
+def _validate_non_negative_integer(value: object, *, eval_file: Path, location: str) -> int:
+    if type(value) is not int or value < 0:
+        raise _configuration_error(eval_file, location, "must be a non-negative integer")
     return value
 
 
@@ -326,12 +333,18 @@ def _load_eval_config(eval_file: Path) -> tuple[list[Eval], list[AgentConfig]]:
             eval_file=eval_file,
             location=f"{location}.processing_group",
         )
+        eval_retries = _validate_non_negative_integer(
+            data.get("eval_retries", 0),
+            eval_file=eval_file,
+            location=f"{location}.eval_retries",
+        )
         agents.append(
             AgentConfig(
                 agent_type=agent_type,
                 agent_model=agent_model,
                 effort=effort,
                 processing_group=processing_group,
+                eval_retries=eval_retries,
             )
         )
 
@@ -464,18 +477,45 @@ def run_agent(
             )
 
             run_count = max(eval_exec.eval.run_count, 1)
+            eval_exec.status = EvalExecutionStatus.RUNNING
             run_scores: list[float] = []
             total_tokens = 0
             total_time = 0.0
             for run_number in range(1, run_count + 1):
                 if run_count > 1:
                     log.info(f"Run {run_number}/{run_count}")
-                run_result = docker_runner.docker_run(
-                    arrange_script=arrange_script,
-                    act_script=act_script,
-                    score_script=score_script,
-                    image=image,
-                )
+                for retry_number in range(aee.agent_config.eval_retries + 1):
+                    if retry_number > 0:
+                        docker_runner = DockerRunner(
+                            agent_type=aee.agent_config.agent_type,
+                            agent_model=aee.agent_config.agent_model,
+                            agent_effort=aee.agent_config.effort,
+                            logger=log,
+                            session_id=session_id,
+                        )
+                    try:
+                        run_result = docker_runner.docker_run(
+                            arrange_script=arrange_script,
+                            act_script=act_script,
+                            score_script=score_script,
+                            image=image,
+                        )
+                        break
+                    except Exception as error:
+                        eval_exec.last_error = f"{type(error).__name__}: {error}"
+                        if retry_number >= aee.agent_config.eval_retries:
+                            eval_exec.status = EvalExecutionStatus.FAILED
+                            raise
+                        eval_exec.retries_used += 1
+                        eval_exec.status = EvalExecutionStatus.RETRYING
+                        log.warning(
+                            "Eval %s failed: %s. Retrying entire eval (%s/%s)",
+                            eval_exec.eval.number,
+                            eval_exec.last_error,
+                            retry_number + 1,
+                            aee.agent_config.eval_retries,
+                        )
+                        progress.put("update")
                 run_scores.append(run_result.score)
                 total_tokens += run_result.total_tokens
                 total_time += run_result.time_taken_seconds
@@ -487,6 +527,7 @@ def run_agent(
             eval_exec.time_taken_seconds = total_time
             aee.total_time_taken_seconds += total_time
             eval_exec.date_executed = datetime.now()
+            eval_exec.status = EvalExecutionStatus.COMPLETED
             progress.put("update")
 
     except Exception:

@@ -20,6 +20,7 @@ from src.models import (
     AgentEvalStatus,
     Eval,
     EvalExecution,
+    EvalExecutionStatus,
     ResultFormat,
 )
 from src.repositories.evaluation_results import (
@@ -32,6 +33,7 @@ EXPECTED_CSV_COLUMNS = [
     "agent_type",
     "agent_model",
     "agent_effort",
+    "agent_eval_retries",
     "agent_status",
     "agent_total_score",
     "agent_total_tokens",
@@ -46,6 +48,9 @@ EXPECTED_CSV_COLUMNS = [
     "eval_total_tokens",
     "eval_time_taken_seconds",
     "eval_date_executed",
+    "eval_status",
+    "eval_retries_used",
+    "eval_last_error",
 ]
 
 
@@ -208,6 +213,30 @@ class TestJsonEvaluationResultsRepository:
         assert nested["date_executed"] == executed.isoformat()
         assert nested["agent_config"]["agent_type"] == "opencode"
 
+    def test_exports_retry_configuration_and_recovery_metadata(self, tmp_path):
+        # Arrange
+        repo = JsonEvaluationResultsRepository(run_dir=tmp_path)
+        agent = AgentConfig(
+            agent_type=AgentType.PI,
+            agent_model="model-a",
+            eval_retries=2,
+        )
+        eval_exec = _eval_execution(agent=agent)
+        eval_exec.status = EvalExecutionStatus.COMPLETED
+        eval_exec.retries_used = 1
+        eval_exec.last_error = "TimeoutError: act timed out"
+
+        # Act
+        repo.export([_agent_eval_execution(agent=agent, evals=[eval_exec])])
+
+        # Assert
+        result = _read_results(tmp_path)[0]
+        assert result["agent_config"]["eval_retries"] == 2
+        nested = result["evals_executions"][0]
+        assert nested["status"] == "completed"
+        assert nested["retries_used"] == 1
+        assert nested["last_error"] == "TimeoutError: act timed out"
+
     def test_preserves_none_values_as_json_null(self, tmp_path):
         # Arrange
         repo = JsonEvaluationResultsRepository(run_dir=tmp_path)
@@ -271,6 +300,29 @@ class TestCsvEvaluationResultsRepository:
         assert results_file.is_file()
         assert fieldnames == EXPECTED_CSV_COLUMNS
         assert "\r\n" not in results_file.read_text(encoding="utf-8")
+
+    def test_exports_retry_configuration_and_recovery_metadata(self, tmp_path):
+        # Arrange
+        repo = CsvEvaluationResultsRepository(run_dir=tmp_path)
+        agent = AgentConfig(
+            agent_type=AgentType.PI,
+            agent_model="model-a",
+            eval_retries=2,
+        )
+        eval_exec = _eval_execution(agent=agent)
+        eval_exec.status = EvalExecutionStatus.COMPLETED
+        eval_exec.retries_used = 1
+        eval_exec.last_error = "TimeoutError: act timed out"
+
+        # Act
+        repo.export([_agent_eval_execution(agent=agent, evals=[eval_exec])])
+
+        # Assert
+        _, rows = _read_csv_results(tmp_path)
+        assert rows[0]["agent_eval_retries"] == "2"
+        assert rows[0]["eval_status"] == "completed"
+        assert rows[0]["eval_retries_used"] == "1"
+        assert rows[0]["eval_last_error"] == "TimeoutError: act timed out"
 
     def test_writes_one_row_per_nested_eval_execution(self, tmp_path):
         # Arrange

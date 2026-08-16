@@ -19,6 +19,14 @@ class AgentEvalStatus(StrEnum):
     UNHEALTHY = "unhealthy"
 
 
+class EvalExecutionStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    RETRYING = "retrying"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 @dataclass
 class AgentProvisioning:
     volumes: dict[str, dict[str, str]] = field(default_factory=dict)
@@ -47,6 +55,7 @@ class AgentConfig:
     agent_model: str
     effort: str | None = None
     processing_group: str | None = None
+    eval_retries: int = 0
 
 
 @dataclass
@@ -58,6 +67,9 @@ class EvalExecution:
     score: float | None = None
     time_taken_seconds: float | None = None
     date_executed: datetime | None = None
+    status: EvalExecutionStatus = EvalExecutionStatus.PENDING
+    retries_used: int = 0
+    last_error: str | None = None
 
 
 @dataclass

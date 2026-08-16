@@ -17,6 +17,7 @@ from src.models import (
     Eval,
     AgentEvalExecution,
     EvalExecution,
+    EvalExecutionStatus,
     AgentEvalStatus,
     ResultFormat,
     EvalSession,
@@ -199,9 +200,25 @@ class LiveStatus:
             )
             status = AgentEvalStatus(agent_eval_exec.status)
             if status == AgentEvalStatus.PROCESSING:
+                retrying_eval = next(
+                    (
+                        eval_exec
+                        for eval_exec in agent_eval_exec.evals_executions
+                        if eval_exec.status == EvalExecutionStatus.RETRYING
+                    ),
+                    None,
+                )
+                if retrying_eval is not None:
+                    status_text = (
+                        f"retry e{retrying_eval.eval.number} "
+                        f"{retrying_eval.retries_used}/"
+                        f"{agent_eval_exec.agent_config.eval_retries}"
+                    )
+                else:
+                    status_text = status.value
                 status_cell = Spinner(
                     "arc",
-                    text=Text(status.value, style=STATUS_STYLES[status]),
+                    text=Text(status_text, style=STATUS_STYLES[status]),
                     style=PALETTE["accent_alt"],
                 )
             else:

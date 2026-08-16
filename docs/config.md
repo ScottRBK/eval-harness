@@ -88,6 +88,7 @@ the file.
 |`agent_model`|string|Model identifier for the agent. Agent-specific: `haiku`/`sonnet`/`opus` for `claude_code`; a `provider/model` from the OpenCode config for `opencode`; or Pi's provider/model identifier, such as `openai-codex/gpt-5.4-mini`|`llama.cpp ai/qwen3.6-27b-8Q`|
 |`effort`|string|Optional — reasoning-effort level passed to the agent at runtime via the `AGENT_EFFORT` env var (`claude_code` applies it as `--effort`; Pi maps it to `--thinking`; `opencode` currently accepts but ignores it). Also appended to the agent's log filename and recorded in the results (`agent_effort`), so agents sharing a type and model stay distinguishable|`high`|
 |`processing_group`|string|Optional — agents sharing a group run serially, never concurrently. Ungrouped agents and separate groups run in parallel up to `MAX_AGENT_CONCURRENCY`. Use it to pin agents that share a backend such as a single inference server|`bosman-server`|
+|`eval_retries`|int|Optional — number of times to retry a failed eval run. Defaults to `0`. Every retry uses a fresh container and reruns `arrange`, `act`, and `score`, regardless of where or why the previous attempt failed|`1`|
 
 ```json
 "agents": [
@@ -99,7 +100,8 @@ the file.
     {
         "agent_type": "opencode",
         "agent_model": "llama.cpp bosman/qwen3.6-35b",
-        "processing_group": "bosman-server"
+        "processing_group": "bosman-server",
+        "eval_retries": 1
     }
 ]
 ```
