@@ -597,7 +597,7 @@ def run_session(
         futures = [pool.submit(_run_chain, chain) for chain in chains]
         while not all(f.done() for f in futures) or not progress.empty():
             try:
-                progress.get(timeout=0.1)
+                progress.get(timeout=5.0)
             except Empty:
                 continue
             on_update()
