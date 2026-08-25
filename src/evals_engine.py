@@ -30,6 +30,10 @@ from src.models import (
     ResultFormat,
 )
 from src.docker_runner import DockerRunner, build_image
+from src.failure_diagnostics import (
+    capture_failure_diagnostics,
+    diagnostic_attempt_dir,
+)
 from src.logging_config import agent_logger, configure_logging
 from src.helpers.naming import safe_name
 from src.config.settings import settings
@@ -80,6 +84,40 @@ class EvalImageResolver:
 
 
 _AGENT_SHELL_TOKEN_TRACKER = """
+import logging as _eval_harness_logging
+import os as _eval_harness_os
+
+_eval_harness_trace_path = _eval_harness_os.environ.get("EVAL_HARNESS_AGENT_SHELL_TRACE_PATH")
+_eval_harness_trace_handler = None
+if _eval_harness_trace_path:
+    class _EvalHarnessFlushFileHandler(_eval_harness_logging.FileHandler):
+        def emit(self, record):
+            try:
+                super().emit(record)
+            finally:
+                self.flush()
+
+    try:
+        _eval_harness_os.makedirs(
+            _eval_harness_os.path.dirname(_eval_harness_trace_path),
+            mode=0o700,
+            exist_ok=True,
+        )
+        _eval_harness_trace_handler = _EvalHarnessFlushFileHandler(
+            _eval_harness_trace_path,
+            mode="a",
+            encoding="utf-8",
+        )
+        _eval_harness_os.chmod(_eval_harness_trace_path, 0o600)
+        _eval_harness_agent_shell_logger = _eval_harness_logging.getLogger("agent_shell")
+        _eval_harness_agent_shell_logger.setLevel(_eval_harness_logging.DEBUG)
+        _eval_harness_trace_handler.setLevel(_eval_harness_logging.DEBUG)
+        _eval_harness_agent_shell_logger.addHandler(_eval_harness_trace_handler)
+    except Exception:
+        if _eval_harness_trace_handler is not None:
+            _eval_harness_trace_handler.close()
+        _eval_harness_trace_handler = None
+
 try:
     from agent_shell.shell import AgentShell as _EvalHarnessAgentShell
 except Exception:
@@ -448,33 +486,53 @@ def run_agent(
 
         for eval_exec in aee.evals_executions:
             log.info(f"Loading Evalaution {eval_exec.eval.number} - {eval_exec.eval.description}")
-            eval_mod = _load_eval_class(eval_exec.eval.eval_dir)
+            try:
+                eval_mod = _load_eval_class(eval_exec.eval.eval_dir)
 
-            image = image_resolver.resolve(eval_exec.eval.eval_dir, eval_mod, log)
+                image = image_resolver.resolve(eval_exec.eval.eval_dir, eval_mod, log)
 
-            # Small reminder - we split per phase as to ensure we do not get a leak of certain
-            # embedded values in to the container, for example answers used in the score phase
-            # in bytes on the command line
-            arrange_script = _method_to_script(
-                eval_mod.arrange,
-                embedded_values=getattr(eval_mod, "arrange_embedded_values", {}),
-            )
-            act_script = _method_to_script(
-                eval_mod.act,
-                embedded_values=getattr(eval_mod, "act_embedded_values", {}),
-            )
-            score_script = _method_to_script(
-                eval_mod.score,
-                embedded_values=getattr(eval_mod, "score_embedded_values", {}),
-            )
-
-            docker_runner = DockerRunner(
-                agent_type=aee.agent_config.agent_type,
-                agent_model=aee.agent_config.agent_model,
-                agent_effort=aee.agent_config.effort,
-                logger=log,
-                session_id=session_id,
-            )
+                # Small reminder - we split per phase as to ensure we do not get a leak of
+                # certain embedded values in to the container, for example answers used in the
+                # score phase in bytes on the command line.
+                arrange_script = _method_to_script(
+                    eval_mod.arrange,
+                    embedded_values=getattr(eval_mod, "arrange_embedded_values", {}),
+                )
+                act_script = _method_to_script(
+                    eval_mod.act,
+                    embedded_values=getattr(eval_mod, "act_embedded_values", {}),
+                )
+                score_script = _method_to_script(
+                    eval_mod.score,
+                    embedded_values=getattr(eval_mod, "score_embedded_values", {}),
+                )
+            except BaseException as error:
+                if settings.CAPTURE_FAILURE_DIAGNOSTICS:
+                    attempt_dir = diagnostic_attempt_dir(
+                        run_dir,
+                        agent_type=aee.agent_config.agent_type,
+                        agent_model=aee.agent_config.agent_model,
+                        effort=aee.agent_config.effort,
+                        eval_number=eval_exec.eval.number,
+                        run_number=1,
+                        attempt_number=1,
+                    )
+                    try:
+                        capture_failure_diagnostics(
+                            attempt_dir=attempt_dir,
+                            phase="setup",
+                            error=error,
+                            exit_code=None,
+                            timed_out=False,
+                            container=None,
+                            log=log,
+                        )
+                    except BaseException as capture_error:
+                        log.warning(
+                            "Failure diagnostics could not be captured: %s",
+                            capture_error,
+                        )
+                raise
 
             run_count = max(eval_exec.eval.run_count, 1)
             eval_exec.status = EvalExecutionStatus.RUNNING
@@ -485,14 +543,27 @@ def run_agent(
                 if run_count > 1:
                     log.info(f"Run {run_number}/{run_count}")
                 for retry_number in range(aee.agent_config.eval_retries + 1):
-                    if retry_number > 0:
-                        docker_runner = DockerRunner(
+                    attempt_dir = None
+                    if settings.CAPTURE_FAILURE_DIAGNOSTICS:
+                        attempt_dir = diagnostic_attempt_dir(
+                            run_dir,
                             agent_type=aee.agent_config.agent_type,
                             agent_model=aee.agent_config.agent_model,
-                            agent_effort=aee.agent_config.effort,
-                            logger=log,
-                            session_id=session_id,
+                            effort=aee.agent_config.effort,
+                            eval_number=eval_exec.eval.number,
+                            run_number=run_number,
+                            attempt_number=retry_number + 1,
                         )
+                    runner_kwargs = {
+                        "agent_type": aee.agent_config.agent_type,
+                        "agent_model": aee.agent_config.agent_model,
+                        "agent_effort": aee.agent_config.effort,
+                        "logger": log,
+                        "session_id": session_id,
+                    }
+                    if attempt_dir is not None:
+                        runner_kwargs["diagnostics_dir"] = attempt_dir
+                    docker_runner = DockerRunner(**runner_kwargs)
                     try:
                         run_result = docker_runner.docker_run(
                             arrange_script=arrange_script,

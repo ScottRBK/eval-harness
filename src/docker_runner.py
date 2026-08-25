@@ -11,6 +11,11 @@ from uuid import UUID
 
 from src.models import AgentProvisioning, DockerRunResult
 from src.config.settings import settings
+from src.failure_diagnostics import (
+    TRACE_ENV,
+    TRACE_PATH,
+    capture_failure_diagnostics,
+)
 from src.helpers.naming import safe_name
 
 _SESSION_LABEL = "com.eval-harness.session"
@@ -68,6 +73,7 @@ class DockerRunner:
         agent_effort: str | None = None,
         logger: logging.Logger | None = None,
         session_id: UUID | None = None,
+        diagnostics_dir: Path | None = None,
     ):
         self._agent_type = agent_type
         self._agent_model = agent_model
@@ -77,6 +83,7 @@ class DockerRunner:
         # Throwaway dirs we create for credentials; deleted after the run.
         self._temp_dirs: list[Path] = []
         self._session_id = session_id
+        self._diagnostics_dir = diagnostics_dir
 
     def _staged_mount(self, files: list[Path], container_dir: str) -> dict[str, dict[str, str]]:
         """Copy files into a throwaway dir and bind that dir read-write.
@@ -321,40 +328,52 @@ class DockerRunner:
         image: str,
     ) -> DockerRunResult:
 
-        client = docker.from_env()
-        prov = self._provision_agent()
+        client = None
         container = None
+        failure: BaseException | None = None
+        phase = "provisioning"
+        exit_code: int | None = None
+        timed_out = False
 
         score = 0.0
         total_tokens = 0
-        time_start = time.time()
+        time_start = 0.0
         effort_suffix = f"_{self._agent_effort}" if self._agent_effort else ""
         container_name = safe_name(
             f"eval_harness_{self._agent_type.value}_{self._agent_model}{effort_suffix}"
         )
 
         try:
-            client.containers.get(container_name).remove(force=True)
-        except docker.errors.NotFound:
-            pass
+            client = docker.from_env()
+            prov = self._provision_agent()
+            time_start = time.time()
+            phase = "container"
 
-        labels = {}
-        if self._session_id is not None:
-            labels[_SESSION_LABEL] = str(self._session_id)
+            try:
+                client.containers.get(container_name).remove(force=True)
+            except docker.errors.NotFound:
+                pass
 
-        try:
+            labels = {}
+            if self._session_id is not None:
+                labels[_SESSION_LABEL] = str(self._session_id)
+
+            environment = {
+                "AGENT_TYPE": self._agent_type.value,
+                "AGENT_MODEL": self._agent_model,
+                "AGENT_EFFORT": self._agent_effort or "",
+                **({"GH_TOKEN": settings.GITHUB_TOKEN} if settings.GITHUB_TOKEN else {}),
+                **({"ADO_PAT": settings.AZURE_DEVOPS_PAT} if settings.AZURE_DEVOPS_PAT else {}),
+                **prov.environment,
+            }
+            if settings.CAPTURE_FAILURE_DIAGNOSTICS:
+                environment[TRACE_ENV] = TRACE_PATH
+
             container = client.containers.run(
                 image=image,
                 command=["sleep", "infinity"],
                 volumes=prov.volumes,
-                environment={
-                    "AGENT_TYPE": self._agent_type.value,
-                    "AGENT_MODEL": self._agent_model,
-                    "AGENT_EFFORT": self._agent_effort or "",
-                    **({"GH_TOKEN": settings.GITHUB_TOKEN} if settings.GITHUB_TOKEN else {}),
-                    **({"ADO_PAT": settings.AZURE_DEVOPS_PAT} if settings.AZURE_DEVOPS_PAT else {}),
-                    **prov.environment,
-                },
+                environment=environment,
                 detach=True,
                 name=container_name,
                 labels=labels,
@@ -371,6 +390,9 @@ class DockerRunner:
                 ("act", act_script),
                 ("score", score_script),
             ]:
+                phase = label
+                exit_code = None
+                timed_out = False
                 timeout_seconds = phase_timeouts[label]
                 # future_me: -u to ensure stdout/stderr unbffered
                 cmd = [
@@ -407,6 +429,7 @@ class DockerRunner:
                 exit_code = client.api.exec_inspect(exec_id)["ExitCode"]
 
                 if exit_code in (124, 137):
+                    timed_out = True
                     self._log.error(f"{label} timed out after {timeout_seconds}s")
                     raise TimeoutError(f"{label} timed out after {timeout_seconds}s")
 
@@ -435,7 +458,27 @@ class DockerRunner:
 
                 self._log.info(f"phase {label} completed")
 
+        except BaseException as error:
+            failure = error
+            raise
         finally:
+            if failure is not None and settings.CAPTURE_FAILURE_DIAGNOSTICS:
+                try:
+                    capture_failure_diagnostics(
+                        attempt_dir=self._diagnostics_dir,
+                        phase=phase,
+                        error=failure,
+                        exit_code=exit_code,
+                        timed_out=timed_out,
+                        container=container,
+                        log=self._log,
+                    )
+                except BaseException as capture_error:
+                    self._log.warning(
+                        "Failure diagnostics could not be captured: %s",
+                        capture_error,
+                    )
+
             if container is not None:
                 try:
                     container.stop(timeout=5)

@@ -5,7 +5,10 @@ are redirected under pytest's ``tmp_path`` so nothing leaks, and ``settings`` is
 patched so no host secrets or files are required.
 """
 
+import io
+import json
 import stat
+import tarfile
 import tempfile
 from pathlib import Path
 from unittest import mock
@@ -15,6 +18,7 @@ import pytest
 from agent_shell.models.agent import AgentType
 
 from src.docker_runner import DockerRunner, build_image
+from src.failure_diagnostics import TRACE_ENV, TRACE_PATH
 
 
 @pytest.fixture(autouse=True)
@@ -684,6 +688,210 @@ class TestDockerRun:
         # Act / Assert
         with mock.patch("src.docker_runner.docker.from_env", return_value=client):
             with pytest.raises(RuntimeError):
+                runner.docker_run("a", "b", "c", "img")
+
+    def test_captures_failed_attempt_before_container_cleanup(
+        self, claude_token, make_docker_client, monkeypatch, tmp_path
+    ):
+        # Arrange
+        monkeypatch.setattr("src.docker_runner.settings.CAPTURE_FAILURE_DIAGNOSTICS", True)
+        client = make_docker_client([("boom", 1), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        archive = io.BytesIO()
+        trace = b"Raw event: {'marker': 'before failure'}\n"
+        with tarfile.open(fileobj=archive, mode="w") as tar:
+            member = tarfile.TarInfo("agent-shell-trace.log")
+            member.size = len(trace)
+            tar.addfile(member, io.BytesIO(trace))
+        client._container.get_archive.return_value = (iter([archive.getvalue()]), {})
+        client._container.attrs = {
+            "Id": "container-id",
+            "Name": "/eval-container",
+            "Image": "image-id",
+            "State": {"Status": "running", "ExitCode": 0},
+            "Config": {"Env": ["CLAUDE_CODE_OAUTH_TOKEN=secret"]},
+            "Mounts": [{"Source": "/host/workspace", "Destination": "/workspace"}],
+        }
+        attempt_dir = tmp_path / "attempt-01"
+        runner = DockerRunner(
+            AgentType.CLAUDE_CODE,
+            "model",
+            diagnostics_dir=attempt_dir,
+        )
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            with pytest.raises(RuntimeError, match="arrange failed"):
+                runner.docker_run("a", "b", "c", "img")
+
+        # Assert
+        manifest = json.loads((attempt_dir / "failure.json").read_text())
+        assert manifest["phase"] == "arrange"
+        assert manifest["exception_type"] == "RuntimeError"
+        assert manifest["exit_code"] == 1
+        assert (attempt_dir / "agent-shell-trace.log").read_bytes() == trace
+        assert "secret" not in (attempt_dir / "container-inspect.json").read_text()
+        client._container.get_archive.assert_called_once_with(TRACE_PATH)
+        client._container.stop.assert_called_once()
+        client._container.remove.assert_called_once()
+
+    def test_container_launch_failure_writes_manifest_without_exit_code(
+        self, claude_token, make_docker_client, monkeypatch, tmp_path
+    ):
+        # Arrange
+        monkeypatch.setattr("src.docker_runner.settings.CAPTURE_FAILURE_DIAGNOSTICS", True)
+        client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        client.containers.run.side_effect = RuntimeError("container launch failed")
+        runner = DockerRunner(
+            AgentType.CLAUDE_CODE,
+            "model",
+            diagnostics_dir=tmp_path / "container",
+        )
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            with pytest.raises(RuntimeError, match="container launch failed"):
+                runner.docker_run("a", "b", "c", "img")
+
+        # Assert
+        manifest = json.loads((tmp_path / "container" / "failure.json").read_text())
+        assert manifest["phase"] == "container"
+        assert "exit_code" not in manifest
+
+    def test_provisioning_failure_writes_manifest_without_container(
+        self, claude_token, monkeypatch, tmp_path
+    ):
+        # Arrange
+        monkeypatch.setattr("src.docker_runner.settings.CAPTURE_FAILURE_DIAGNOSTICS", True)
+        runner = DockerRunner(
+            AgentType.CLAUDE_CODE,
+            "model",
+            diagnostics_dir=tmp_path / "provisioning",
+        )
+        monkeypatch.setattr(
+            runner,
+            "_provision_agent",
+            mock.Mock(side_effect=RuntimeError("credentials unavailable")),
+        )
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=mock.Mock()):
+            with pytest.raises(RuntimeError, match="credentials unavailable"):
+                runner.docker_run("a", "b", "c", "img")
+
+        # Assert
+        manifest = json.loads((tmp_path / "provisioning" / "failure.json").read_text())
+        assert manifest["phase"] == "provisioning"
+        assert "exit_code" not in manifest
+        assert not (tmp_path / "provisioning" / "agent-shell-trace.log").exists()
+
+    def test_timeout_metadata_is_captured(
+        self, claude_token, make_docker_client, monkeypatch, tmp_path
+    ):
+        # Arrange
+        monkeypatch.setattr("src.docker_runner.settings.CAPTURE_FAILURE_DIAGNOSTICS", True)
+        client = make_docker_client([("timeout", 124), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        runner = DockerRunner(
+            AgentType.CLAUDE_CODE,
+            "model",
+            diagnostics_dir=tmp_path / "timeout",
+        )
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            with pytest.raises(TimeoutError):
+                runner.docker_run("a", "b", "c", "img")
+
+        # Assert
+        manifest = json.loads((tmp_path / "timeout" / "failure.json").read_text())
+        assert manifest["timed_out"] is True
+        assert manifest["exit_code"] == 124
+
+    def test_signal_exit_metadata_is_captured(
+        self, claude_token, make_docker_client, monkeypatch, tmp_path
+    ):
+        # Arrange
+        monkeypatch.setattr("src.docker_runner.settings.CAPTURE_FAILURE_DIAGNOSTICS", True)
+        client = make_docker_client([("terminated", 143), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        attempt_dir = tmp_path / "signal"
+        runner = DockerRunner(
+            AgentType.CLAUDE_CODE,
+            "model",
+            diagnostics_dir=attempt_dir,
+        )
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            with pytest.raises(RuntimeError, match="arrange failed"):
+                runner.docker_run("a", "b", "c", "img")
+
+        # Assert
+        manifest = json.loads((attempt_dir / "failure.json").read_text())
+        assert manifest["exit_code"] == 143
+        assert manifest["signal"] == "SIGTERM"
+        assert manifest["timed_out"] is False
+
+    def test_successful_attempt_leaves_no_diagnostics(
+        self, claude_token, make_docker_client, monkeypatch, tmp_path
+    ):
+        # Arrange
+        monkeypatch.setattr("src.docker_runner.settings.CAPTURE_FAILURE_DIAGNOSTICS", True)
+        client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        attempt_dir = tmp_path / "successful-attempt"
+        runner = DockerRunner(
+            AgentType.CLAUDE_CODE,
+            "model",
+            diagnostics_dir=attempt_dir,
+        )
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            runner.docker_run("a", "b", "c", "img")
+
+        # Assert
+        assert not attempt_dir.exists()
+        assert client.containers.run.call_args.kwargs["environment"][TRACE_ENV]
+
+    def test_disabled_capture_has_no_handler_configuration_or_artifacts(
+        self, claude_token, make_docker_client, monkeypatch, tmp_path
+    ):
+        # Arrange
+        monkeypatch.setattr("src.docker_runner.settings.CAPTURE_FAILURE_DIAGNOSTICS", False)
+        client = make_docker_client([("boom", 1), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        attempt_dir = tmp_path / "disabled-attempt"
+        runner = DockerRunner(
+            AgentType.CLAUDE_CODE,
+            "model",
+            diagnostics_dir=attempt_dir,
+        )
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            with pytest.raises(RuntimeError):
+                runner.docker_run("a", "b", "c", "img")
+
+        # Assert
+        assert not attempt_dir.exists()
+        assert TRACE_ENV not in client.containers.run.call_args.kwargs["environment"]
+
+    def test_capture_failure_cannot_replace_original_exception(
+        self, claude_token, make_docker_client, monkeypatch, tmp_path
+    ):
+        # Arrange
+        monkeypatch.setattr("src.docker_runner.settings.CAPTURE_FAILURE_DIAGNOSTICS", True)
+        monkeypatch.setattr(
+            "src.docker_runner.capture_failure_diagnostics",
+            mock.Mock(side_effect=RuntimeError("diagnostics failed")),
+        )
+        client = make_docker_client([("boom", 1), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        runner = DockerRunner(
+            AgentType.CLAUDE_CODE,
+            "model",
+            diagnostics_dir=tmp_path / "capture-error",
+        )
+
+        # Act / Assert
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            with pytest.raises(RuntimeError, match="arrange failed"):
                 runner.docker_run("a", "b", "c", "img")
 
     def test_cleanup_runs_when_phase_raises(self, opencode_creds, make_docker_client):

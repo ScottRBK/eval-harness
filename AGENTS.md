@@ -66,7 +66,9 @@ values) must include a review and update of README.md, AGENTS.md and the skills 
 
 ## Logs
 Each evaluation run has its own output folder (specified in `settings.py` with the variable `OUTPUT_DIR`)
-There is a `session.log` as well as a per agent log file.
+There is a `session.log` as well as a per agent log file. Opt-in failed-attempt diagnostics are
+saved below the same run directory under `diagnostics/`; enable them with
+`EVAL_HARNESS_CAPTURE_FAILURE_DIAGNOSTICS=true`.
 
 ## Status
 

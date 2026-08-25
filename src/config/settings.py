@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     ARRANGE_TIMEOUT_SECONDS: int = 60 * 60
     ACT_TIMEOUT_SECONDS: int = 60 * 60
     SCORE_TIMEOUT_SECONDS: int = 10 * 60
+    CAPTURE_FAILURE_DIAGNOSTICS: bool = False
 
 
 settings = Settings()

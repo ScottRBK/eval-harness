@@ -245,6 +245,13 @@ scripts.
 As well as this a .log file for each agent there is also a results file that is created based on your
 [configuration](docs/config.md). 
 
+For opt-in debugging of failed attempts, set `EVAL_HARNESS_CAPTURE_FAILURE_DIAGNOSTICS=true`.
+Best-effort diagnostics are saved under the session run directory in
+`diagnostics/<agent>/<eval-XX>/run-XX/attempt-XX/`. They contain failure metadata and, when
+available, the AgentShell raw-event trace and safe container state. Raw traces may contain prompts,
+tool arguments, and tool output, so treat them as sensitive. Successful attempts and runs with the
+switch disabled create no diagnostic artifacts.
+
 The results file is written as either `results.json` (the default) or `results.csv`. See
 [Results File Schema](docs/results.md) for the full field-by-field breakdown.
 

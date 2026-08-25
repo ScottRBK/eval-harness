@@ -94,6 +94,41 @@ def test_timeout_removes_real_container(
     assert_container_removed("eval_harness_claude_code_integration-timeout")
 
 
+def test_successful_attempt_leaves_no_diagnostics(
+    tmp_path,
+    monkeypatch,
+    require_docker_image,
+    fake_claude_token,
+    assert_container_removed,
+):
+    # Arrange
+    require_docker_image(IMAGE, BUILD_COMMAND)
+    monkeypatch.setattr(
+        "src.docker_runner.settings.CAPTURE_FAILURE_DIAGNOSTICS",
+        True,
+    )
+    attempt_dir = tmp_path / "successful-attempt"
+    runner = DockerRunner(
+        agent_type=AgentType.CLAUDE_CODE,
+        agent_model="integration-success-no-diagnostics",
+        logger=logging.getLogger("integration.docker_runner"),
+        diagnostics_dir=attempt_dir,
+    )
+
+    # Act
+    result = runner.docker_run(
+        arrange_script="print('arranged')",
+        act_script="print('acted')",
+        score_script="print('EVAL_SCORE=1.0')",
+        image=IMAGE,
+    )
+
+    # Assert
+    assert result.score == 1.0
+    assert not attempt_dir.exists()
+    assert_container_removed("eval_harness_claude_code_integration-success-no-diagnostics")
+
+
 def test_failed_phase_removes_real_container(
     require_docker_image,
     fake_claude_token,

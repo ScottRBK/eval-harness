@@ -19,6 +19,9 @@ Every run writes to its own directory: `<OUTPUT_DIR>/<YYYYMMDD_HHMMSS>_<session_
   Characters that cannot appear in a filename (e.g. `/` in model names) are replaced with `_`.
 - `results.json` (or `results.csv`) - written when the session finishes; see the
   [Results File Schema](../../docs/results.md) for the field-by-field breakdown.
+- `diagnostics/<agent>/eval-XX/run-XX/attempt-XX/` - present only for failed attempts when
+  `EVAL_HARNESS_CAPTURE_FAILURE_DIAGNOSTICS=true`; contains failure metadata and best-effort
+  AgentShell trace/container state.
 
 ## Read the logs
 Log lines are formatted `<timestamp> - <level> - <file:line> - <message>`. The markers to look
@@ -49,6 +52,7 @@ exits with code 1.
 |`RuntimeError: ... not configured` or `... auth file not found`, before any phase marker|Missing or expired credentials for that agent|[Authorisation](../../docs/authorisation.md)|
 |`<phase> failed (exit <N>)` followed by a `--- container output ---` block|The phase script raised; the block holds the full traceback|The traceback; for `arrange`, also external dependencies (repo clones, MCP servers)|
 |`<phase> timed out after <N>s` (exit 124 or 137)|The phase exceeded its timeout|`EVAL_HARNESS_<ARRANGE\|ACT\|SCORE>_TIMEOUT_SECONDS`, defaults 3600/3600/600|
+|Raw AgentShell details are needed|Failure diagnostics were enabled|The failed attempt's `diagnostics/.../failure.json` and, when present, `agent-shell-trace.log`|
 |`NameError` or `ImportError` in a phase traceback|The eval violates an authoring constraint (module-level state, imports outside the method body)|[Constraints](../eval_creation/SKILL.md#constraints) in the eval creation skill|
 |`TypeError: <Class> must be a class implementing arrange/act/score`|The eval class does not satisfy the `EvaluationFile` protocol|Same constraints section|
 |Score is 0.0 with no error|The `score` method never printed `EVAL_SCORE=` (or the agent genuinely scored zero)|The `[score]` output for that run|

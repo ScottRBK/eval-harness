@@ -27,6 +27,7 @@ prefixed with `EVAL_HARNESS_`
 |`LOG_LEVEL`|string|Level for the root logger (the harness's own logging)|`DEBUG`|
 |`DOCKER_LOG_LEVEL`|string|Level for the `docker` library logger, which is noisy at `INFO`|`WARNING`|
 |`URLLIB3_LOG_LEVEL`|string|Level for the `urllib3` logger, which is noisy at `INFO`|`WARNING`|
+|`CAPTURE_FAILURE_DIAGNOSTICS`|bool|Opt-in capture of failed-attempt metadata, AgentShell raw-event traces, and safe container state; disabled by default|`true`|
 |`EVALS_DIRS`|string|os.pathsep-separated list of directories searched, in order, for evals; each eval is `<dir>/<eval_dir>/eval.py`. Directories may live outside the repo and the first match wins (`:` on Linux/macOS, `;` on Windows)|`example_evals`|
 |`EVAL_CONFIG_DIR`|string|Directory of JSON evaluation configuration files listed by the interactive TUI|`eval_configs`|
 |`MAX_AGENT_CONCURRENCY`|int|Maximum number of processing chains run in parallel. An ungrouped agent is its own chain; each processing group is a single chain|`4`|

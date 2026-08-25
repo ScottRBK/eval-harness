@@ -12,14 +12,18 @@ status transitions, score/time accumulation, and — critically — the number a
 ordering of ``progress`` events the threaded drain loop consumes.
 """
 
+import json
 import logging
 import os
+import subprocess
+import sys
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
 from queue import Queue
 from types import SimpleNamespace
+from unittest import mock
 from uuid import uuid4
 from concurrent.futures import ThreadPoolExecutor
 
@@ -107,6 +111,7 @@ def fake_runner(monkeypatch):
             constructed=[],
             efforts=[],
             session_ids=[],
+            diagnostic_dirs=[],
             calls=[],
             results=list(results),
             idx=0,
@@ -115,10 +120,18 @@ def fake_runner(monkeypatch):
         )
         lock = threading.Lock()
 
-        def _factory(agent_type, agent_model, agent_effort=None, logger=None, session_id=None):
+        def _factory(
+            agent_type,
+            agent_model,
+            agent_effort=None,
+            logger=None,
+            session_id=None,
+            diagnostics_dir=None,
+        ):
             recorder.constructed.append((agent_type, agent_model))
             recorder.efforts.append(agent_effort)
             recorder.session_ids.append(session_id)
+            recorder.diagnostic_dirs.append(diagnostics_dir)
 
             def _health_check(image):
                 recorder.health_calls.append(image)
@@ -614,6 +627,36 @@ class TestRunAgentRunCount:
 
 
 class TestRunAgentFailure:
+    def test_setup_failure_writes_best_effort_manifest(self, fake_runner, monkeypatch, tmp_path):
+        # Arrange
+        monkeypatch.setattr("src.evals_engine.settings.CAPTURE_FAILURE_DIAGNOSTICS", True)
+        fake_runner([])
+        monkeypatch.setattr(
+            "src.evals_engine._load_eval_class",
+            mock.Mock(side_effect=RuntimeError("eval could not load")),
+        )
+        aee = _make_aee(["e1"])
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+
+        # Act
+        with pytest.raises(RuntimeError, match="eval could not load"):
+            run_agent(aee, Queue(), run_dir=run_dir)
+
+        # Assert
+        manifest_path = (
+            run_dir
+            / "diagnostics"
+            / "claude_code_model"
+            / "eval-00"
+            / "run-01"
+            / "attempt-01"
+            / "failure.json"
+        )
+        manifest = json.loads(manifest_path.read_text())
+        assert manifest["phase"] == "setup"
+        assert "exit_code" not in manifest
+
     def test_retries_failed_eval_and_uses_successful_result(self, fake_runner, fake_eval_loading):
         # Arrange
         fake_eval_loading()
@@ -629,6 +672,27 @@ class TestRunAgentFailure:
         assert aee.status == AgentEvalStatus.COMPLETED
         assert aee.evals_executions[0].score == 0.75
         assert aee.evals_executions[0].total_tokens == 12
+
+    def test_retries_use_isolated_diagnostic_attempt_paths(
+        self, fake_runner, fake_eval_loading, monkeypatch, tmp_path
+    ):
+        # Arrange
+        monkeypatch.setattr("src.evals_engine.settings.CAPTURE_FAILURE_DIAGNOSTICS", True)
+        fake_eval_loading()
+        recorder = fake_runner([RuntimeError("first"), (1.0, 1.0)])
+        aee = _make_aee(["e1"], eval_retries=1)
+
+        # Act
+        run_agent(aee, Queue(), run_dir=tmp_path)
+
+        # Assert
+        attempt_paths = [path for path in recorder.diagnostic_dirs if path is not None]
+        assert [path.relative_to(tmp_path).as_posix() for path in attempt_paths] == [
+            "diagnostics/claude_code_model/eval-00/run-01/attempt-01",
+            "diagnostics/claude_code_model/eval-00/run-01/attempt-02",
+        ]
+        assert attempt_paths[0] != attempt_paths[1]
+        assert not tmp_path.joinpath("diagnostics").exists()
 
     def test_records_recovered_retry_and_emits_progress_update(
         self, fake_runner, fake_eval_loading
@@ -972,6 +1036,12 @@ def _sample_method(self):
     return value + 1
 
 
+def _raw_agent_shell_log_method(self):
+    import logging
+
+    logging.getLogger("agent_shell.test_adapter").debug("Raw event: marker")
+
+
 def _identity_decorator(func):
     return func
 
@@ -1035,6 +1105,46 @@ class TestMethodToScript:
         assert "AgentShell as _EvalHarnessAgentShell" in script
         assert "EVAL_TOTAL_TOKENS=" in script
         assert "response.output_tokens" in script
+
+    def test_tracker_can_configure_flushed_private_agent_shell_trace(self):
+        # Act
+        script = _method_to_script(_sample_method)
+
+        # Assert
+        assert "EVAL_HARNESS_AGENT_SHELL_TRACE_PATH" in script
+        assert "FileHandler" in script
+        assert "logging.DEBUG" in script
+        assert "flush" in script
+        assert "0o600" in script
+
+    def test_tracker_writes_debug_records_only_when_enabled(self, tmp_path, monkeypatch):
+        # Arrange
+        trace = tmp_path / "trace.log"
+        script = _method_to_script(_raw_agent_shell_log_method)
+        env = os.environ.copy()
+        env["EVAL_HARNESS_AGENT_SHELL_TRACE_PATH"] = str(trace)
+
+        # Act
+        subprocess.run(  # noqa: S603 - generated test script is local and intentional
+            [sys.executable, "-c", script], check=True, env=env
+        )
+
+        # Assert
+        assert "Raw event: marker" in trace.read_text()
+        assert trace.stat().st_mode & 0o777 == 0o600
+
+        # Act — without the internal path, the tracker must not install a handler.
+        monkeypatch.delenv("EVAL_HARNESS_AGENT_SHELL_TRACE_PATH", raising=False)
+        disabled_trace = tmp_path / "disabled.log"
+        disabled_env = os.environ.copy()
+        disabled_env.pop("EVAL_HARNESS_AGENT_SHELL_TRACE_PATH", None)
+        disabled_env["EVAL_HARNESS_UNUSED_TRACE_PATH"] = str(disabled_trace)
+        subprocess.run(  # noqa: S603 - generated test script is local and intentional
+            [sys.executable, "-c", script], check=True, env=disabled_env
+        )
+
+        # Assert
+        assert not disabled_trace.exists()
 
     def test_extracts_decorated_method_body(self):
         # Act

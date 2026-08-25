@@ -1,13 +1,16 @@
 """Integration tests for eval-engine method extraction into real Docker runs."""
 
+import json
 from queue import Queue
 from uuid import uuid4
 
 import docker
+
 import pytest
 from agent_shell.models.agent import AgentType, HealthCheckResult
 
 from src.evals_engine import run_agent
+from src.failure_diagnostics import TRACE_ENV
 from src.models import (
     AgentConfig,
     AgentEvalExecution,
@@ -132,6 +135,114 @@ def test_run_agent_extracts_eval_methods_and_runs_them_in_real_container(
     assert eval_execution.time_taken_seconds > 0
     assert eval_execution.date_executed is not None
     assert_container_removed("eval_harness_claude_code_engine-integration")
+
+
+def test_failed_agent_shell_phase_recovers_raw_event_diagnostics(
+    tmp_path,
+    monkeypatch,
+    require_docker_image,
+    fake_claude_token,
+    assert_container_removed,
+):
+    # Arrange
+    require_docker_image(IMAGE, BUILD_COMMAND)
+    eval_dir = tmp_path / "agent_shell_failure_eval"
+    eval_dir.mkdir()
+    (eval_dir / "eval.py").write_text(
+        r"""
+class AgentShellFailureEval:
+    image = "eval-harness:latest"
+
+    async def arrange(self):
+        pass
+
+    async def act(self):
+        import os
+        from pathlib import Path
+        from agent_shell.models.agent import AgentType
+        from agent_shell.shell import AgentShell
+
+        fake = Path("/tmp/claude")
+        fake.write_text(
+            "#!/bin/sh\n"
+            "printf '%s\\n' '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"diagnostic event\"}]}}'\n"
+            "printf '%s\\n' '{\"type\":\"result\",\"is_error\":false,\"usage\":{\"output_tokens\":4},\"duration_ms\":1,\"total_cost_usd\":0}'\n"
+        )
+        fake.chmod(0o755)
+        os.environ["PATH"] = "/tmp:" + os.environ["PATH"]
+        shell = AgentShell(agent_type=AgentType.CLAUDE_CODE)
+        await shell.execute(cwd="/workspace", prompt="diagnostic test", model="fake")
+        trace_mode = Path(os.environ["EVAL_HARNESS_AGENT_SHELL_TRACE_PATH"]).stat().st_mode
+        assert trace_mode & 0o777 == 0o600
+        raise RuntimeError("intentional act failure")
+
+    async def score(self):
+        print("EVAL_SCORE=1.0")
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("src.evals_engine.settings.EVALS_DIRS", str(tmp_path))
+    monkeypatch.setattr(
+        "src.evals_engine.settings.CAPTURE_FAILURE_DIAGNOSTICS",
+        True,
+    )
+    monkeypatch.setattr(
+        "src.evals_engine.DockerRunner.health_check",
+        lambda self, image: HealthCheckResult(healthy=True),
+    )
+
+    agent_config = AgentConfig(
+        agent_type=AgentType.CLAUDE_CODE,
+        agent_model="agent-shell-failure",
+    )
+    eval_config = Eval(
+        number=1,
+        eval_dir="agent_shell_failure_eval",
+        description="Raw AgentShell event failure diagnostics",
+        run_count=1,
+        tags=[],
+    )
+    eval_execution = EvalExecution(
+        id=uuid4(),
+        eval=eval_config,
+        agent_config=agent_config,
+    )
+    agent_execution = AgentEvalExecution(
+        agent_config=agent_config,
+        total_score=0,
+        total_tokens=0,
+        total_time_taken_seconds=0,
+        evals_executions=[eval_execution],
+        status=AgentEvalStatus.PENDING,
+    )
+    run_dir = tmp_path / "session-run"
+    run_dir.mkdir()
+
+    # Act
+    with pytest.raises(RuntimeError, match="act failed"):
+        run_agent(agent_execution, Queue(), run_dir=run_dir)
+
+    # Assert
+    attempt_dir = (
+        run_dir
+        / "diagnostics"
+        / "claude_code_agent-shell-failure"
+        / "eval-01"
+        / "run-01"
+        / "attempt-01"
+    )
+    manifest = json.loads((attempt_dir / "failure.json").read_text())
+    assert manifest["phase"] == "act"
+    assert manifest["exception_type"] == "RuntimeError"
+    assert manifest["exit_code"] != 0
+    trace = (attempt_dir / "agent-shell-trace.log").read_text()
+    assert "Raw event:" in trace
+    assert "diagnostic event" in trace
+    inspect = json.loads((attempt_dir / "container-inspect.json").read_text())
+    assert "Config" not in inspect
+    assert "Mounts" not in inspect
+    assert TRACE_ENV not in (attempt_dir / "container-inspect.json").read_text()
+    assert_container_removed("eval_harness_claude_code_agent-shell-failure")
 
 
 def test_run_agent_builds_and_uses_eval_fixture_dockerfile(
