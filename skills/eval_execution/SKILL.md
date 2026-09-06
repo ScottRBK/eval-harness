@@ -23,6 +23,10 @@ follow the [eval interpretation skill](../eval_interpretation/SKILL.md).
 3. Credentials exist for **every** `agent_type` in the evaluation file - see the
    [authorisation guide](../../docs/authorisation.md). Evals that clone private repos also need
    the harness-level `GITHUB_TOKEN`.
+4. If broad agent process commands have previously terminated AgentShell, consider
+   `EVAL_HARNESS_AGENT_PID_NAMESPACE_ISOLATION=true`. It needs no eval changes, but disables
+   Docker's default seccomp filter for health-check and evaluation containers. See the
+   [configuration guide](../../docs/config.md#agent-pid-namespace-isolation).
 
 ## Compose the evaluation file
 An evaluation file lists `evals` and `agents`; every agent runs every eval (a full cross

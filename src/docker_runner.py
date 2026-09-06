@@ -20,6 +20,21 @@ from src.helpers.naming import safe_name
 
 _SESSION_LABEL = "com.eval-harness.session"
 _TOKEN_MARKER = "EVAL_TOTAL_TOKENS="
+_AGENT_SHELL_ISOLATION_ENV = "AGENTSHELL_ISOLATION_POLICY"
+_PID_NAMESPACE_ISOLATION = "linux-pid-namespace"
+
+
+def _agent_isolation_environment() -> dict[str, str]:
+    if not settings.AGENT_PID_NAMESPACE_ISOLATION:
+        return {}
+    return {_AGENT_SHELL_ISOLATION_ENV: _PID_NAMESPACE_ISOLATION}
+
+
+def _agent_isolation_container_options() -> dict[str, list[str]]:
+    if not settings.AGENT_PID_NAMESPACE_ISOLATION:
+        return {}
+    return {"security_opt": ["seccomp=unconfined"]}
+
 
 # Harness-owned agent config, version-controlled. Mounted read-only into the
 # container so runs are reproducible and independent of the host's own config.
@@ -267,7 +282,9 @@ class DockerRunner:
                 "AGENT_EFFORT": self._agent_effort or "",
                 "HEALTH_CHECK_TIMEOUT_SECONDS": str(settings.HEALTH_CHECK_TIMEOUT_SECONDS),
                 **prov.environment,
+                **_agent_isolation_environment(),
             },
+            **_agent_isolation_container_options(),
             detach=True,
             name=container_name,
             labels=labels,
@@ -365,6 +382,7 @@ class DockerRunner:
                 **({"GH_TOKEN": settings.GITHUB_TOKEN} if settings.GITHUB_TOKEN else {}),
                 **({"ADO_PAT": settings.AZURE_DEVOPS_PAT} if settings.AZURE_DEVOPS_PAT else {}),
                 **prov.environment,
+                **_agent_isolation_environment(),
             }
             if settings.CAPTURE_FAILURE_DIAGNOSTICS:
                 environment[TRACE_ENV] = TRACE_PATH
@@ -374,6 +392,7 @@ class DockerRunner:
                 command=["sleep", "infinity"],
                 volumes=prov.volumes,
                 environment=environment,
+                **_agent_isolation_container_options(),
                 detach=True,
                 name=container_name,
                 labels=labels,

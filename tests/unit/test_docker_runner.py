@@ -468,6 +468,40 @@ class TestProvisionAgent:
 
 
 class TestDockerRun:
+    def test_pid_namespace_isolation_configures_agent_shell_and_docker(
+        self, claude_token, make_docker_client, monkeypatch
+    ):
+        # Arrange
+        monkeypatch.setattr("src.docker_runner.settings.AGENT_PID_NAMESPACE_ISOLATION", True)
+        client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            runner.docker_run("a", "b", "c", "img")
+
+        # Assert
+        options = client.containers.run.call_args.kwargs
+        assert options["security_opt"] == ["seccomp=unconfined"]
+        assert options["environment"]["AGENTSHELL_ISOLATION_POLICY"] == "linux-pid-namespace"
+
+    def test_pid_namespace_isolation_is_absent_by_default(
+        self, claude_token, make_docker_client, monkeypatch
+    ):
+        # Arrange
+        monkeypatch.setattr("src.docker_runner.settings.AGENT_PID_NAMESPACE_ISOLATION", False)
+        client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            runner.docker_run("a", "b", "c", "img")
+
+        # Assert
+        options = client.containers.run.call_args.kwargs
+        assert "security_opt" not in options
+        assert "AGENTSHELL_ISOLATION_POLICY" not in options["environment"]
+
     def test_passes_phase_timeout_to_docker_exec_command(
         self, claude_token, make_docker_client, monkeypatch
     ):
@@ -1040,6 +1074,23 @@ class TestHealthCheck:
     real in-container crash must still become FAILED, never get mis-parsed as
     UNHEALTHY.
     """
+
+    def test_pid_namespace_isolation_uses_same_container_options_as_eval(
+        self, claude_token, health_timeout, monkeypatch
+    ):
+        # Arrange
+        monkeypatch.setattr("src.docker_runner.settings.AGENT_PID_NAMESPACE_ISOLATION", True)
+        client = _fake_exec_run_client((0, b"HEALTHY=True\n"))
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            runner.health_check("img")
+
+        # Assert
+        options = client.containers.run.call_args.kwargs
+        assert options["security_opt"] == ["seccomp=unconfined"]
+        assert options["environment"]["AGENTSHELL_ISOLATION_POLICY"] == "linux-pid-namespace"
 
     def test_unhealthy_verdict_parses_from_markers_and_does_not_raise(
         self, claude_token, health_timeout

@@ -76,6 +76,11 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 docker build -t eval-harness:latest -f src/docker/Dockerfile src/docker/
 docker build -t eval-harness-rust:latest -f src/docker/rust/Dockerfile src/docker/
 ```
+
+If an agent kills its own AgentShell process with a broad command such as `pkill -f`, opt into PID
+namespace isolation with `EVAL_HARNESS_AGENT_PID_NAMESPACE_ISOLATION=true`. This disables Docker's
+default seccomp filter for eval containers; see [Configuration](docs/config.md#agent-pid-namespace-isolation).
+
 1. Start the interactive TUI
 ```bash
 uv run main.py

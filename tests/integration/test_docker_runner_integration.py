@@ -69,6 +69,43 @@ print('EVAL_SCORE=0.875')
     assert_container_removed("eval_harness_claude_code_integration-model")
 
 
+def test_pid_namespace_isolation_is_wired_into_real_container(
+    monkeypatch,
+    require_docker_image,
+    fake_claude_token,
+    assert_container_removed,
+):
+    # Arrange
+    require_docker_image(IMAGE, BUILD_COMMAND)
+    monkeypatch.setattr(
+        "src.docker_runner.settings.AGENT_PID_NAMESPACE_ISOLATION",
+        True,
+    )
+    runner = _runner("integration-pid-isolation")
+    act_script = r"""
+import os
+import subprocess
+
+assert os.environ['AGENTSHELL_ISOLATION_POLICY'] == 'linux-pid-namespace'
+subprocess.run(
+    ['unshare', '--user', '--map-root-user', '--pid', '--fork', 'true'],
+    check=True,
+)
+"""
+
+    # Act
+    result = runner.docker_run(
+        arrange_script="print('arranged')",
+        act_script=act_script,
+        score_script="print('EVAL_SCORE=1.0')",
+        image=IMAGE,
+    )
+
+    # Assert
+    assert result.score == 1.0
+    assert_container_removed("eval_harness_claude_code_integration-pid-isolation")
+
+
 def test_timeout_removes_real_container(
     monkeypatch,
     require_docker_image,

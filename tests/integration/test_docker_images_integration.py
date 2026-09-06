@@ -14,6 +14,35 @@ BASE_IMAGE = "eval-harness:latest"
 BASE_BUILD_COMMAND = "docker build -t eval-harness:latest -f src/docker/Dockerfile src/docker/"
 
 
+def test_base_image_has_agent_shell_pid_namespace_policy(require_docker_image, docker_client):
+    # Arrange
+    require_docker_image(BASE_IMAGE, BASE_BUILD_COMMAND)
+    script = """
+import importlib.metadata
+import os
+from agent_shell.models.agent import AgentType
+from agent_shell.shell import AgentShell
+
+assert importlib.metadata.version('agent-shell-py') == '0.3.1'
+os.environ['AGENTSHELL_ISOLATION_POLICY'] = 'linux-pid-namespace'
+shell = AgentShell(agent_type=AgentType.CLAUDE_CODE)
+assert type(shell.isolation_policy).__name__ == 'LinuxPidNamespaceIsolation'
+print('agent-shell isolation available')
+"""
+
+    # Act
+    output = docker_client.containers.run(
+        image=BASE_IMAGE,
+        command=["python", "-c", script],
+        remove=True,
+        stdout=True,
+        stderr=True,
+    )
+
+    # Assert
+    assert b"agent-shell isolation available" in output
+
+
 def test_base_image_has_pi_cli(require_docker_image, docker_client):
     """Pi is installed in the same image used by every evaluation."""
     require_docker_image(BASE_IMAGE, BASE_BUILD_COMMAND)

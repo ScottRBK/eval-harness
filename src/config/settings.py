@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     ACT_TIMEOUT_SECONDS: int = 60 * 60
     SCORE_TIMEOUT_SECONDS: int = 10 * 60
     CAPTURE_FAILURE_DIAGNOSTICS: bool = False
+    AGENT_PID_NAMESPACE_ISOLATION: bool = False
 
 
 settings = Settings()

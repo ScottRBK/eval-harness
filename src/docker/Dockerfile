@@ -38,7 +38,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh && \
 ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python
 RUN uv python install 3.12 && \
     uv venv /opt/venv --python 3.12 && \
-    uv pip install --python /opt/venv/bin/python 'agent-shell-py>=0.2.5'
+    uv pip install --python /opt/venv/bin/python 'agent-shell-py==0.3.1'
 ENV PATH="/opt/venv/bin:/home/node/.local/bin:/home/node/.grok/bin:${PATH}"
 
 # npm global prefix relocated so non-root `node` user can install globals

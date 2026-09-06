@@ -28,12 +28,30 @@ prefixed with `EVAL_HARNESS_`
 |`DOCKER_LOG_LEVEL`|string|Level for the `docker` library logger, which is noisy at `INFO`|`WARNING`|
 |`URLLIB3_LOG_LEVEL`|string|Level for the `urllib3` logger, which is noisy at `INFO`|`WARNING`|
 |`CAPTURE_FAILURE_DIAGNOSTICS`|bool|Opt-in capture of failed-attempt metadata, AgentShell raw-event traces, and safe container state; disabled by default|`true`|
+|`AGENT_PID_NAMESPACE_ISOLATION`|bool|Opt-in AgentShell PID-namespace isolation for agent processes; disabled by default|`true`|
 |`EVALS_DIRS`|string|os.pathsep-separated list of directories searched, in order, for evals; each eval is `<dir>/<eval_dir>/eval.py`. Directories may live outside the repo and the first match wins (`:` on Linux/macOS, `;` on Windows)|`example_evals`|
 |`EVAL_CONFIG_DIR`|string|Directory of JSON evaluation configuration files listed by the interactive TUI|`eval_configs`|
 |`MAX_AGENT_CONCURRENCY`|int|Maximum number of processing chains run in parallel. An ungrouped agent is its own chain; each processing group is a single chain|`4`|
 |`ARRANGE_TIMEOUT_SECONDS`|int|Timeout for the arrange phase of each eval, in seconds|`3600`|
 |`ACT_TIMEOUT_SECONDS`|int|Timeout for the act phase of each eval, in seconds|`3600`|
 |`SCORE_TIMEOUT_SECONDS`|int|Timeout for the score phase of each eval, in seconds|`600`|
+
+### Agent PID namespace isolation
+
+Some agents run broad process commands such as `pkill -f`, which can otherwise terminate their own
+AgentShell process. Enable isolation with:
+
+```bash
+EVAL_HARNESS_AGENT_PID_NAMESPACE_ISOLATION=true
+```
+
+The harness then starts health-check and evaluation containers with
+`seccomp=unconfined` and sets `AGENTSHELL_ISOLATION_POLICY=linux-pid-namespace` inside them.
+Existing evals require no changes.
+
+This disables Docker's default seccomp syscall filter for those containers and increases their
+access to kernel syscalls. It does not make them privileged or remove Docker's other isolation
+boundaries. Leave it disabled unless agent process termination is affecting evaluations.
 
 ## Evaluation Configuration
 All evaluation configuration comes from a JSON evaluation file. The repository includes

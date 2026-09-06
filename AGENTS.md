@@ -43,8 +43,11 @@ Before evals run, each agent/model is gated by a health check (`DockerRunner.hea
 `src/docker_runner.py`, wired into `run_agent` in `src/evals_engine.py`). An unhealthy probe sets
 `AgentEvalStatus.UNHEALTHY` and skips the eval loop; a probe crash or eval error is `FAILED`.
 
-The harness passes `AGENT_TYPE` and `AGENT_MODEL` to the container via env vars; `act()` reads them 
+The harness passes `AGENT_TYPE` and `AGENT_MODEL` to the container via env vars; `act()` reads them
 and builds an `AgentShell` from `agent_shell` (the unified CLI-agent wrapper installed in the image).
+`EVAL_HARNESS_AGENT_PID_NAMESPACE_ISOLATION=true` applies AgentShell PID-namespace isolation to
+health checks and evals without requiring changes to individual evals. It also runs those containers
+with `seccomp=unconfined`; the security trade-off is documented in `docs/config.md`.
 
 Evaluation configuration files live under `EVAL_CONFIG_DIR` (default `eval_configs`) and are
 listed by the interactive TUI. The tracked examples are `evals.example.json`, containing all
