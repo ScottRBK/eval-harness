@@ -29,6 +29,26 @@ def test_base_image_has_pi_cli(require_docker_image, docker_client):
     assert output
 
 
+def test_base_image_has_opencode_cli(require_docker_image, docker_client):
+    """OpenCode on PATH must be a runnable Linux binary."""
+    require_docker_image(BASE_IMAGE, BASE_BUILD_COMMAND)
+
+    try:
+        output = docker_client.containers.run(
+            image=BASE_IMAGE,
+            command=["opencode", "--version"],
+            remove=True,
+            stdout=True,
+            stderr=True,
+        )
+    except docker.errors.ContainerError as error:
+        output = error.stderr or b""
+
+    text = output.decode(errors="replace")
+    assert "exec format error" not in text.lower()
+    assert "Bun v" in text
+
+
 def test_rust_image_can_compile_and_run_a_tiny_crate(
     docker_client,
     require_docker_image,

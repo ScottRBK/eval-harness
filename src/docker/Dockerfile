@@ -72,3 +72,8 @@ RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} && \
     curl -fsSL https://x.ai/cli/install.sh -o /tmp/grok-install.sh && \
     bash /tmp/grok-install.sh && \
     rm /tmp/grok-install.sh
+
+# postinstall is skipped, so PATH still points at a shebang-less placeholder.
+# Use the glibc binary already installed as opencode-linux-x64.
+RUN ln -sfn ../lib/node_modules/opencode-linux-x64/bin/opencode \
+        /usr/local/share/npm-global/bin/opencode
