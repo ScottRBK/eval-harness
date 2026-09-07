@@ -18,6 +18,11 @@ Agent limits worth knowing: Pi has no native MCP support. Cursor MCP add/remove/
 through AgentShell (`~/.cursor/mcp.json`), but Cursor still has no per-call
 `disallowed_tools` (tool policy lives in `.cursor/cli.json`).
 
+Use `capability_profiles` in an eval config to compare a profile-neutral eval with and without a
+Pi extension or an MCP server. Profiles are additive and applied in each fresh container before
+`arrange`; an empty profile does not remove capabilities supplied by the image or eval. See
+[Configuration](docs/config.md#capability-profiles).
+
 A lot of this is possible thanks to the agentic harness abstraction repository
 [agent-shell](https://github.com/ScottRBK/agent-shell), check it out if you have use cases where you 
 want to seemlessly switch between agentic harness for a particular worklow that you invoke via code 
@@ -107,9 +112,10 @@ uv run main.py --run_eval --eval_file eval_configs/simple_evals.example.json
 The harness is structured in a way that there is an [evaluation protocol](src/evaluation_file_protocol.py), 
 any evaluation must implement the same methods within the protocol.
 
-The harness ingests an evaluation configuration file that determines which evaluations
-and agent harness/model combinations are in scope. The interactive TUI discovers JSON
-configuration files in `EVAL_CONFIG_DIR` (default `eval_configs`). The repository includes
+The harness ingests an evaluation configuration file that determines which evaluations,
+agent harness/model combinations, and optional capability profiles are in scope. The interactive
+TUI discovers JSON configuration files in `EVAL_CONFIG_DIR` (default `eval_configs`). The
+repository includes
 `eval_configs/evals.example.json` with every example evaluation and
 `eval_configs/simple_evals.example.json` with a smaller two-evaluation run. Headless
 runs require the configuration file to be supplied with `--eval_file`.

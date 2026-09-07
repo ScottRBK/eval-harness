@@ -21,6 +21,9 @@ The nested `agent_config` object:
 |-----|----|-----------|-------|
 |`agent_type`|string|the CLI agent that was run|codex|
 |`agent_model`|string|the model the agent used|gpt-5.4-mini|
+|`agent_id`|string \| null|optional variant label used to distinguish runs|pi-with-tools|
+|`capability_profile`|string|selected additive capability profile|pi-with-tools|
+|`capability_manifest`|object|secret-free package/MCP definition recorded for provenance|`{"packages": [], "mcp_servers": []}`|
 |`effort`|string \| null|reasoning-effort level, `null` when not set|high|
 |`processing_group`|string \| null|optional group used to serialise agents that can't run concurrently, `null` when not set|null|
 |`eval_retries`|int|number of retries allowed for each failed eval run|1|
@@ -52,3 +55,7 @@ The nested `eval` object:
 
 The CSV file holds the same data flattened to one row per eval execution, with the agent-level fields
 (prefixed `agent_`) repeated on every row alongside the per-eval fields (prefixed `eval_`).
+`agent_capability_manifest` is a JSON-encoded cell. The manifest omits MCP environment/header values,
+records MCP argument count/hash rather than argument values, exports only MCP URL origins plus a
+path hash, and removes credentials from URL-like sources; it is intended for provenance, not secret
+recovery.

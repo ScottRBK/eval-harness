@@ -54,6 +54,10 @@ never shipped to the container.
 cannot be run with Pi. Cursor MCP add/remove/list is supported by AgentShell (writes
 `~/.cursor/mcp.json`). Cursor still has no per-call `disallowed_tools` — tool policy lives in
 `.cursor/cli.json`, so deny-list evals are not enforceable on Cursor.
+1. Evaluation configuration may assign a reusable capability profile to an agent. Profiles are
+applied by DockerRunner in the fresh container before `arrange` and are additive; use an eval
+that does not configure the same capability itself for a meaningful baseline/treatment comparison.
+Pi profiles may install pinned packages; supported non-Pi adapters may register MCP servers.
 1. An eval may declare either `image` for a manually managed prebuilt image or `dockerfile` for a
 Dockerfile path relative to its eval directory. The Dockerfile's parent is the complete build
 context; keep hidden tests, answers and oracles outside it. Do not declare both attributes.

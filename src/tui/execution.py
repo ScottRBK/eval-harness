@@ -188,6 +188,7 @@ class LiveStatus:
 
         table.add_column("Harness", style="bold white", no_wrap=True)
         table.add_column("Model", style="bold white", no_wrap=True)
+        table.add_column("Variant", style="bold white", no_wrap=True)
         table.add_column("Status")
         table.add_column("Evals Count")
         table.add_column("Total Time (s)")
@@ -225,13 +226,22 @@ class LiveStatus:
                 status_cell = Text(status.value, style=STATUS_STYLES[status])
 
             if agent_eval_exec.agent_config.effort:
-                model_name = f"{agent_eval_exec.agent_config.agent_model} ({agent_eval_exec.agent_config.effort})"
+                model_name = (
+                    f"{agent_eval_exec.agent_config.agent_model} "
+                    f"({agent_eval_exec.agent_config.effort})"
+                )
             else:
                 model_name = agent_eval_exec.agent_config.agent_model
+
+            profile = agent_eval_exec.agent_config.capability_profile
+            variant_name = agent_eval_exec.agent_config.agent_id or ""
+            if profile != "base":
+                variant_name = f"{variant_name} ({profile})" if variant_name else profile
 
             table.add_row(
                 f"{agent_eval_exec.agent_config.agent_type}",
                 model_name,
+                variant_name,
                 status_cell,
                 f"{evals_completed} / {len(agent_eval_exec.evals_executions)}",
                 f"{agent_eval_exec.total_time_taken_seconds:,.2f}",

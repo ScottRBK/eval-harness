@@ -12,6 +12,7 @@ from src.evals_engine import (
 )
 from src.tui.menu import Menu
 from src.models import AgentEvalStatus, ResultFormat
+from src.logging_config import agent_label
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ def main():
         logger.info(f"Evaluation run finished: {summary}")
         print(f"\n{summary}")
         for aee in failed:
-            print(f"  FAILED: {aee.agent_config.agent_type}-{aee.agent_config.agent_model}")
+            print(f"  FAILED: {agent_label(aee.agent_config)}")
 
         print(
             f"saving results file to {eval_session.run_dir / get_results_filename(eval_session.result_format)}"

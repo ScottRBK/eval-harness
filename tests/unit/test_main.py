@@ -116,7 +116,7 @@ def test_run_eval_reports_failures_and_exits_nonzero(
 
     output = capsys.readouterr().out
     assert "0 agent(s) completed, 1 failed" in output
-    assert "FAILED: copilot_cli-test-model" in output
+    assert "FAILED: copilot_cli_test-model" in output
 
 
 def test_run_eval_requires_an_eval_file(monkeypatch, capsys):

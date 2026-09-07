@@ -32,6 +32,9 @@ from src.repositories.evaluation_results import (
 EXPECTED_CSV_COLUMNS = [
     "agent_type",
     "agent_model",
+    "agent_id",
+    "capability_profile",
+    "agent_capability_manifest",
     "agent_effort",
     "agent_eval_retries",
     "agent_status",
@@ -213,6 +216,26 @@ class TestJsonEvaluationResultsRepository:
         assert nested["date_executed"] == executed.isoformat()
         assert nested["agent_config"]["agent_type"] == "opencode"
 
+    def test_exports_agent_variant_metadata(self, tmp_path):
+        # Arrange
+        repo = JsonEvaluationResultsRepository(run_dir=tmp_path)
+        agent = AgentConfig(
+            agent_type=AgentType.PI,
+            agent_model="model-a",
+            agent_id="pi-with-tools",
+            capability_profile="pi-tools",
+            capability_manifest={"packages": [{"source": "npm:tools@1.2.3"}]},
+        )
+
+        # Act
+        repo.export([_agent_eval_execution(agent=agent)])
+
+        # Assert
+        result = _read_results(tmp_path)[0]["agent_config"]
+        assert result["agent_id"] == "pi-with-tools"
+        assert result["capability_profile"] == "pi-tools"
+        assert result["capability_manifest"] == {"packages": [{"source": "npm:tools@1.2.3"}]}
+
     def test_exports_retry_configuration_and_recovery_metadata(self, tmp_path):
         # Arrange
         repo = JsonEvaluationResultsRepository(run_dir=tmp_path)
@@ -300,6 +323,28 @@ class TestCsvEvaluationResultsRepository:
         assert results_file.is_file()
         assert fieldnames == EXPECTED_CSV_COLUMNS
         assert "\r\n" not in results_file.read_text(encoding="utf-8")
+
+    def test_exports_agent_variant_metadata(self, tmp_path):
+        # Arrange
+        repo = CsvEvaluationResultsRepository(run_dir=tmp_path)
+        agent = AgentConfig(
+            agent_type=AgentType.PI,
+            agent_model="model-a",
+            agent_id="pi-with-tools",
+            capability_profile="pi-tools",
+            capability_manifest={"packages": [{"source": "npm:tools@1.2.3"}]},
+        )
+
+        # Act
+        repo.export([_agent_eval_execution(agent=agent)])
+
+        # Assert
+        _, rows = _read_csv_results(tmp_path)
+        assert rows[0]["agent_id"] == "pi-with-tools"
+        assert rows[0]["capability_profile"] == "pi-tools"
+        assert json.loads(rows[0]["agent_capability_manifest"]) == {
+            "packages": [{"source": "npm:tools@1.2.3"}]
+        }
 
     def test_exports_retry_configuration_and_recovery_metadata(self, tmp_path):
         # Arrange

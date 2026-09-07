@@ -3,12 +3,16 @@ import inspect
 import importlib.util
 import keyword
 import os
+import re
 import sys
 import textwrap
 import signal
+import traceback
 import logging
 import docker
 import json
+import posixpath
+from urllib.parse import unquote, urlsplit
 
 from pathlib import Path
 from queue import Queue, Empty
@@ -22,6 +26,7 @@ from agent_shell.models.agent import AgentType
 from src.models import (
     AgentConfig,
     AgentEvalExecution,
+    CapabilityProfile,
     AgentEvalStatus,
     EvalExecutionStatus,
     Eval,
@@ -34,8 +39,9 @@ from src.failure_diagnostics import (
     capture_failure_diagnostics,
     diagnostic_attempt_dir,
 )
-from src.logging_config import agent_logger, configure_logging
-from src.helpers.naming import safe_name
+from src.logging_config import agent_label, agent_logger, configure_logging
+from src.helpers.naming import agent_identity, safe_name
+from src.helpers.redaction import redact_secrets
 from src.config.settings import settings
 from src.evaluation_file_protocol import EvaluationFile
 from src.repositories.evaluation_results import (
@@ -46,6 +52,7 @@ from src.repositories.evaluation_results import (
 
 logger = logging.getLogger(__name__)
 _SESSION_LABEL = "com.eval-harness.session"
+_ACTIVE_SESSION_ID: UUID | None = None
 
 
 class EvalImageResolver:
@@ -141,10 +148,13 @@ if _EvalHarnessAgentShell is not None:
 
 
 def _cleanup_eval_containers(signum, frame):
-    """Kill all eval harness containers on SIGINT/SIGTERM."""
+    """Kill this process's eval containers on SIGINT/SIGTERM."""
     try:
         client = docker.from_env()
-        for container in client.containers.list(filters={"label": _SESSION_LABEL}, all=True):
+        label_filter = _SESSION_LABEL
+        if _ACTIVE_SESSION_ID is not None:
+            label_filter = f"{_SESSION_LABEL}={_ACTIVE_SESSION_ID}"
+        for container in client.containers.list(filters={"label": label_filter}, all=True):
             container.remove(force=True)
             logger.info(f"Cleaned up container {container.name}")
     except Exception as e:
@@ -177,8 +187,24 @@ def get_results_service(result_format: ResultFormat, run_dir: Path) -> Evaluatio
 
 
 _CONFIG_KEYS = {"evals", "agents"}
+_PROFILE_KEYS = {"packages", "mcp_servers"}
+_MCP_SERVER_KEYS = {"name", "type", "command", "args", "env", "url", "headers"}
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
+_NPM_PINNED_RE = re.compile(
+    r"npm:(?:@[^/@\s]+/)?[^/@\s]+@"
+    r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)"
+    r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$"
+)
 _EVAL_KEYS = {"number", "eval_dir", "description", "run_count", "tags"}
-_AGENT_KEYS = {"agent_type", "agent_model", "effort", "processing_group", "eval_retries"}
+_AGENT_KEYS = {
+    "agent_type",
+    "agent_model",
+    "effort",
+    "processing_group",
+    "eval_retries",
+    "id",
+    "capability_profile",
+}
 
 
 def _configuration_error(eval_file: Path, location: str, message: str) -> ValueError:
@@ -232,6 +258,8 @@ def _validate_string(
     if not isinstance(value, str) or (not allow_empty and not value.strip()):
         qualifier = "" if allow_empty else " non-empty"
         raise _configuration_error(eval_file, location, f"must be a{qualifier} string")
+    if "\x00" in value:
+        raise _configuration_error(eval_file, location, "must not contain NUL characters")
     return value
 
 
@@ -255,10 +283,394 @@ def _validate_optional_string(
 ) -> str | None:
     if value is not None and not isinstance(value, str):
         raise _configuration_error(eval_file, location, "must be a string or null")
-    return value or None
+    if isinstance(value, str) and "\x00" in value:
+        raise _configuration_error(eval_file, location, "must not contain NUL characters")
+    return value if value and value.strip() else None
 
 
-def _load_eval_config(eval_file: Path) -> tuple[list[Eval], list[AgentConfig]]:
+def _validate_identifier(
+    value: object,
+    *,
+    eval_file: Path,
+    location: str,
+) -> str:
+    value = _validate_string(value, eval_file=eval_file, location=location)
+    if not _IDENTIFIER_RE.fullmatch(value):
+        raise _configuration_error(
+            eval_file,
+            location,
+            "must start with a letter or number and contain only letters, numbers, '.', '_' or '-'",
+        )
+    return value
+
+
+def _validate_package_source(
+    source: str,
+    *,
+    eval_file: Path,
+    location: str,
+) -> None:
+    """Validate Pi package syntax without checking paths inside the future container."""
+    if source.startswith("npm:"):
+        if not _NPM_PINNED_RE.fullmatch(source):
+            raise _configuration_error(
+                eval_file,
+                location,
+                "must be a pinned npm package source, such as npm:tools@1.2.3",
+            )
+        return
+
+    remote_prefixes = ("git:", "https://", "http://", "ssh://")
+    if source.startswith(remote_prefixes):
+        repository = source[4:] if source.startswith("git:") else source
+        if "://" in repository:
+            try:
+                parsed = urlsplit(repository)
+                _ = parsed.port
+            except ValueError:
+                raise _configuration_error(
+                    eval_file, location, "must be a valid pinned Git package source"
+                ) from None
+            if parsed.scheme not in {"https", "http", "ssh", "git"} or not parsed.hostname:
+                raise _configuration_error(
+                    eval_file, location, "must be a valid pinned Git package source"
+                )
+            if parsed.password is not None or (
+                parsed.username is not None
+                and not (parsed.scheme == "ssh" and parsed.username == "git")
+            ):
+                raise _configuration_error(eval_file, location, "must not include URL credentials")
+            if parsed.query or parsed.fragment:
+                raise _configuration_error(
+                    eval_file, location, "must use @ref instead of a query or fragment"
+                )
+            path = parsed.path.lstrip("/")
+        else:
+            match = re.fullmatch(r"(?:git@[^: /]+:|[^: /]+/)(.+)", repository)
+            if not match:
+                raise _configuration_error(
+                    eval_file, location, "must be a valid pinned Git package source"
+                )
+            host_part = repository.partition("/")[0]
+            scp_prefix, scp_separator, _ = repository.partition(":")
+            valid_scp_user = (
+                bool(scp_separator) and scp_prefix.startswith("git@") and scp_prefix.count("@") == 1
+            )
+            if "@" in host_part and not valid_scp_user:
+                raise _configuration_error(
+                    eval_file, location, "must not include credentials in Git shorthand"
+                )
+            path = match.group(1)
+        decoded_path = unquote(path)
+        repository_path, separator, ref = decoded_path.partition("@")
+        if ":" in repository_path:
+            raise _configuration_error(
+                eval_file, location, "must not include credentials in Git shorthand"
+            )
+        if (
+            len(repository_path.split("/")) < 2
+            or any(char.isspace() for char in decoded_path)
+            or not separator
+            or not ref
+        ):
+            raise _configuration_error(
+                eval_file,
+                location,
+                "must be a pinned Git package source with an explicit @ref",
+            )
+        return
+
+    if not source.startswith(("/", "./", "../", "~/")):
+        raise _configuration_error(
+            eval_file,
+            location,
+            "must be a pinned npm/Git source or an explicit local path",
+        )
+
+
+def _validate_http_url(
+    url: str,
+    *,
+    eval_file: Path,
+    location: str,
+) -> None:
+    try:
+        parsed = urlsplit(url)
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError:
+        raise _configuration_error(eval_file, location, "must be a valid HTTP URL") from None
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or not hostname
+        or (port is not None and not 1 <= port <= 65535)
+        or any(ord(char) < 0x20 or ord(char) == 0x7F for char in url)
+        or any(char.isspace() for char in url)
+    ):
+        raise _configuration_error(eval_file, location, "must be a valid HTTP URL")
+
+
+def _package_identity(source: str) -> str | None:
+    if source.startswith("npm:"):
+        package, separator, _version = source.removeprefix("npm:").rpartition("@")
+        return f"npm:{package}" if separator and package else None
+
+    remote_prefixes = ("git:", "https://", "http://", "ssh://")
+    if not source.startswith(remote_prefixes):
+        return None
+    repository = source[4:] if source.startswith("git:") else source
+    if "://" in repository:
+        try:
+            parsed = urlsplit(repository)
+            repository_path, separator, _ref = unquote(parsed.path.lstrip("/")).partition("@")
+            host = parsed.hostname
+            port = parsed.port
+        except ValueError:
+            return None
+        if not separator or not host:
+            return None
+        host = host.lower()
+        if ":" in host and not host.startswith("["):
+            host = f"[{host}]"
+        default_port = {"http": 80, "https": 443, "ssh": 22, "git": 9418}.get(parsed.scheme)
+        if port is not None and port != default_port:
+            host = f"{host}:{port}"
+    else:
+        match = re.fullmatch(r"(?:git@([^: /]+):|([^: /]+)/)(.+)", repository)
+        if not match:
+            return None
+        if match.group(2) and "@" in match.group(2):
+            return None
+        host = (match.group(1) or match.group(2)).lower()
+        repository_path, separator, _ref = unquote(match.group(3)).partition("@")
+        if not separator:
+            return None
+
+    repository_path = posixpath.normpath(f"/{repository_path}").lstrip("/")
+    if repository_path.endswith(".git"):
+        repository_path = repository_path[:-4]
+    return f"git:{host}/{repository_path}"
+
+
+def _validate_string_list(
+    value: object,
+    *,
+    eval_file: Path,
+    location: str,
+) -> list[str]:
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item.strip() for item in value
+    ):
+        raise _configuration_error(eval_file, location, "must be a list of non-empty strings")
+    if any("\x00" in item for item in value):
+        raise _configuration_error(eval_file, location, "must not contain NUL characters")
+    return value
+
+
+def _validate_string_mapping(
+    value: object,
+    *,
+    eval_file: Path,
+    location: str,
+) -> dict[str, str]:
+    if not isinstance(value, dict) or any(
+        not isinstance(key, str)
+        or not key.strip()
+        or not isinstance(item, str)
+        or "\x00" in key
+        or "\x00" in item
+        for key, item in value.items()
+    ):
+        raise _configuration_error(eval_file, location, "must be a string-to-string object")
+    return dict(value)
+
+
+def _load_capability_profiles(
+    raw_profiles: object,
+    *,
+    eval_file: Path,
+) -> dict[str, CapabilityProfile]:
+    if raw_profiles is None:
+        raw_profiles = {}
+    if not isinstance(raw_profiles, dict):
+        raise _configuration_error(eval_file, "capability_profiles", "must be an object")
+
+    profiles: dict[str, CapabilityProfile] = {"base": CapabilityProfile()}
+    for profile_name, raw_profile in raw_profiles.items():
+        location = f"capability_profiles[{profile_name!r}]"
+        profile_name = _validate_identifier(
+            profile_name,
+            eval_file=eval_file,
+            location=location,
+        )
+        data = _validate_mapping(
+            raw_profile,
+            eval_file=eval_file,
+            location=location,
+            required=set(),
+            allowed=_PROFILE_KEYS,
+        )
+        package_values = _validate_string_list(
+            data.get("packages", []),
+            eval_file=eval_file,
+            location=f"{location}.packages",
+        )
+        for index, source in enumerate(package_values):
+            _validate_package_source(
+                source,
+                eval_file=eval_file,
+                location=f"{location}.packages[{index}]",
+            )
+        if len(package_values) != len(set(package_values)):
+            raise _configuration_error(
+                eval_file,
+                f"{location}.packages",
+                "contains duplicate package sources",
+            )
+        package_identities: dict[str, str] = {}
+        for source in package_values:
+            identity = _package_identity(source)
+            if identity is None:
+                continue
+            previous = package_identities.get(identity)
+            if previous is not None and previous != source:
+                raise _configuration_error(
+                    eval_file,
+                    f"{location}.packages",
+                    f"contains conflicting versions for {identity!r}",
+                )
+            package_identities[identity] = source
+        packages = tuple(package_values)
+
+        raw_servers = data.get("mcp_servers", [])
+        if not isinstance(raw_servers, list):
+            raise _configuration_error(
+                eval_file,
+                f"{location}.mcp_servers",
+                "must be a list",
+            )
+        mcp_servers: list[dict[str, object]] = []
+        mcp_names: set[str] = set()
+        for index, raw_server in enumerate(raw_servers):
+            server_location = f"{location}.mcp_servers[{index}]"
+            server = _validate_mapping(
+                raw_server,
+                eval_file=eval_file,
+                location=server_location,
+                required={"name", "type"},
+                allowed=_MCP_SERVER_KEYS,
+            )
+            name = _validate_string(
+                server["name"],
+                eval_file=eval_file,
+                location=f"{server_location}.name",
+            )
+            if name in mcp_names:
+                raise _configuration_error(
+                    eval_file,
+                    server_location,
+                    f"contains duplicate MCP server name {name!r}",
+                )
+            mcp_names.add(name)
+            server_type = _validate_string(
+                server["type"],
+                eval_file=eval_file,
+                location=f"{server_location}.type",
+            )
+            if server_type not in {"stdio", "http"}:
+                raise _configuration_error(
+                    eval_file,
+                    f"{server_location}.type",
+                    "must be 'stdio' or 'http'",
+                )
+            command = _validate_optional_string(
+                server.get("command"),
+                eval_file=eval_file,
+                location=f"{server_location}.command",
+            )
+            url = _validate_optional_string(
+                server.get("url"),
+                eval_file=eval_file,
+                location=f"{server_location}.url",
+            )
+            args = _validate_string_list(
+                server.get("args", []),
+                eval_file=eval_file,
+                location=f"{server_location}.args",
+            )
+            env = _validate_string_mapping(
+                server.get("env", {}),
+                eval_file=eval_file,
+                location=f"{server_location}.env",
+            )
+            headers = _validate_string_mapping(
+                server.get("headers", {}),
+                eval_file=eval_file,
+                location=f"{server_location}.headers",
+            )
+            if server_type == "stdio" and not command:
+                raise _configuration_error(
+                    eval_file,
+                    server_location,
+                    "stdio MCP servers require 'command'",
+                )
+            if server_type == "stdio" and (url or headers):
+                raise _configuration_error(
+                    eval_file,
+                    server_location,
+                    "stdio MCP servers cannot have 'url' or 'headers'",
+                )
+            if server_type == "http" and not url:
+                raise _configuration_error(
+                    eval_file,
+                    server_location,
+                    "http MCP servers require 'url'",
+                )
+            if server_type == "http" and url:
+                _validate_http_url(
+                    url,
+                    eval_file=eval_file,
+                    location=f"{server_location}.url",
+                )
+            if server_type == "http" and (command or args or env):
+                raise _configuration_error(
+                    eval_file,
+                    server_location,
+                    "http MCP servers cannot have 'command', 'args', or 'env'",
+                )
+
+            normalized: dict[str, object] = {
+                "name": name,
+                "type": server_type,
+            }
+            if command is not None:
+                normalized["command"] = command
+            if args:
+                normalized["args"] = args
+            if env:
+                normalized["env"] = env
+            if url is not None:
+                normalized["url"] = url
+            if headers:
+                normalized["headers"] = headers
+            mcp_servers.append(normalized)
+
+        if profile_name == "base" and (packages or mcp_servers):
+            raise _configuration_error(
+                eval_file, location, "the reserved base profile must be empty"
+            )
+        profiles[profile_name] = CapabilityProfile(
+            packages=packages,
+            mcp_servers=tuple(mcp_servers),
+        )
+
+    return profiles
+
+
+def _load_eval_config(
+    eval_file: Path,
+) -> tuple[list[Eval], list[AgentConfig], dict[str, CapabilityProfile]]:
     try:
         raw = json.loads(eval_file.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -269,7 +681,11 @@ def _load_eval_config(eval_file: Path) -> tuple[list[Eval], list[AgentConfig]]:
         eval_file=eval_file,
         location="root",
         required=_CONFIG_KEYS,
-        allowed=_CONFIG_KEYS,
+        allowed=_CONFIG_KEYS | {"capability_profiles"},
+    )
+    capability_profiles = _load_capability_profiles(
+        config.get("capability_profiles"),
+        eval_file=eval_file,
     )
     raw_evals = _validate_non_empty_list(
         config["evals"],
@@ -333,6 +749,7 @@ def _load_eval_config(eval_file: Path) -> tuple[list[Eval], list[AgentConfig]]:
         )
 
     agents = []
+    identities = []
     for index, raw_agent in enumerate(raw_agents):
         location = f"agents[{index}]"
         data = _validate_mapping(
@@ -376,6 +793,49 @@ def _load_eval_config(eval_file: Path) -> tuple[list[Eval], list[AgentConfig]]:
             eval_file=eval_file,
             location=f"{location}.eval_retries",
         )
+        raw_agent_id = data.get("id")
+        agent_id = (
+            None
+            if raw_agent_id is None
+            else _validate_identifier(
+                raw_agent_id,
+                eval_file=eval_file,
+                location=f"{location}.id",
+            )
+        )
+        capability_profile = data.get("capability_profile", "base")
+        capability_profile = _validate_identifier(
+            capability_profile,
+            eval_file=eval_file,
+            location=f"{location}.capability_profile",
+        )
+        if capability_profile not in capability_profiles:
+            raise _configuration_error(
+                eval_file,
+                f"{location}.capability_profile",
+                f"profile {capability_profile!r} was not found",
+            )
+        profile = capability_profiles[capability_profile]
+        if profile.packages and agent_type != AgentType.PI:
+            raise _configuration_error(
+                eval_file,
+                location,
+                "capability profile packages are only supported for Pi",
+            )
+        if agent_type == AgentType.CODEX and any(
+            server.get("type") == "http" and server.get("headers") for server in profile.mcp_servers
+        ):
+            raise _configuration_error(
+                eval_file,
+                location,
+                "Codex MCP profiles cannot use HTTP headers",
+            )
+        if profile.mcp_servers and agent_type == AgentType.PI:
+            raise _configuration_error(
+                eval_file,
+                location,
+                "capability profile MCP servers are not supported for Pi",
+            )
         agents.append(
             AgentConfig(
                 agent_type=agent_type,
@@ -383,10 +843,25 @@ def _load_eval_config(eval_file: Path) -> tuple[list[Eval], list[AgentConfig]]:
                 effort=effort,
                 processing_group=processing_group,
                 eval_retries=eval_retries,
+                agent_id=agent_id,
+                capability_profile=capability_profile,
+                capability_manifest=profile.manifest(),
             )
         )
+        variant = agent_id or (None if capability_profile == "base" else capability_profile)
+        identities.append(agent_identity(agent_type, agent_model, effort, variant))
 
-    return evals, agents
+    ids = [agent.agent_id for agent in agents if agent.agent_id is not None]
+    if len(ids) != len(set(ids)):
+        raise _configuration_error(eval_file, "agents", "id values must be unique")
+    if len(identities) != len(set(identities)):
+        raise _configuration_error(
+            eval_file,
+            "agents",
+            "sanitized agent identities must be unique (check type, model, effort, and id/profile)",
+        )
+
+    return evals, agents, capability_profiles
 
 
 def build_eval_session(
@@ -394,7 +869,7 @@ def build_eval_session(
     result_format: ResultFormat,
 ) -> EvalSession:
     session_id = uuid4()
-    evals, agents = _load_eval_config(eval_file)
+    evals, agents, capability_profiles = _load_eval_config(eval_file)
 
     return EvalSession(
         session_id=session_id,
@@ -403,6 +878,7 @@ def build_eval_session(
         eval_file=str(eval_file),
         result_format=result_format,
         run_dir=Path(settings.OUTPUT_DIR) / f"{datetime.now():%Y%m%d_%H%M%S}_{session_id}",
+        capability_profiles=capability_profiles,
     )
 
 
@@ -434,19 +910,35 @@ def run_evals(
     on_update: Callable[[], None] | None = None,
 ) -> list[AgentEvalExecution]:
 
-    with configure_logging(eval_session.run_dir) as run_dir:
-        logger.info(f"Session {eval_session.session_id} starting")
+    global _ACTIVE_SESSION_ID
+    _ACTIVE_SESSION_ID = eval_session.session_id
+    previous_handlers = {}
+    try:
+        with configure_logging(eval_session.run_dir) as run_dir:
+            logger.info(f"Session {eval_session.session_id} starting")
 
-        signal.signal(signal.SIGINT, _cleanup_eval_containers)
-        signal.signal(signal.SIGTERM, _cleanup_eval_containers)
-        logger.info("Beginging Evaluation Run")
-        return run_session(
-            agent_eval_executions=agent_eval_executions,
-            on_update=_noop_update if on_update is None else on_update,
-            max_workers=settings.MAX_AGENT_CONCURRENCY,
-            run_dir=run_dir,
-            session_id=eval_session.session_id,
-        )
+            previous_handlers[signal.SIGINT] = signal.signal(
+                signal.SIGINT, _cleanup_eval_containers
+            )
+            previous_handlers[signal.SIGTERM] = signal.signal(
+                signal.SIGTERM, _cleanup_eval_containers
+            )
+            logger.info("Beginging Evaluation Run")
+            return run_session(
+                agent_eval_executions=agent_eval_executions,
+                on_update=_noop_update if on_update is None else on_update,
+                max_workers=settings.MAX_AGENT_CONCURRENCY,
+                run_dir=run_dir,
+                session_id=eval_session.session_id,
+                capability_profiles=eval_session.capability_profiles,
+            )
+    finally:
+        try:
+            for signum in (signal.SIGINT, signal.SIGTERM):
+                if signum in previous_handlers:
+                    signal.signal(signum, previous_handlers[signum])
+        finally:
+            _ACTIVE_SESSION_ID = None
 
 
 def run_agent(
@@ -455,26 +947,46 @@ def run_agent(
     run_dir=None,
     session_id: UUID | None = None,
     image_resolver: EvalImageResolver | None = None,
+    capability_profiles: dict[str, CapabilityProfile] | None = None,
 ):
 
     log = logger
+    redactions: tuple[str, ...] = ()
 
     try:
         log = agent_logger(aee.agent_config, run_dir) if run_dir else logger
 
         log.info(f"Agent: {aee.agent_config.agent_type}")
         log.info(f"Model: {aee.agent_config.agent_model}")
+        if aee.agent_config.agent_id:
+            log.info(f"Agent ID: {aee.agent_config.agent_id}")
+        if aee.agent_config.capability_profile != "base":
+            log.info(f"Capabilities: {aee.agent_config.capability_profile}")
 
         aee.status = AgentEvalStatus.PROCESSING
         progress.put("update")
 
-        probe = DockerRunner(
-            agent_type=aee.agent_config.agent_type,
-            agent_model=aee.agent_config.agent_model,
-            agent_effort=aee.agent_config.effort,
-            logger=log,
-            session_id=session_id,
+        profile_name = aee.agent_config.capability_profile
+        profile = (capability_profiles or {}).get(profile_name)
+        if profile is not None:
+            redactions = profile.redaction_values()
+        if profile_name != "base" and profile is None:
+            raise ValueError(f"Capability profile {profile_name!r} was not provided")
+        variant = aee.agent_config.agent_id or (
+            None
+            if aee.agent_config.capability_profile == "base"
+            else aee.agent_config.capability_profile
         )
+        probe_kwargs = {
+            "agent_type": aee.agent_config.agent_type,
+            "agent_model": aee.agent_config.agent_model,
+            "agent_effort": aee.agent_config.effort,
+            "logger": log,
+            "session_id": session_id,
+        }
+        if variant is not None:
+            probe_kwargs["agent_variant"] = variant
+        probe = DockerRunner(**probe_kwargs)
         health = probe.health_check(image=settings.BASE_IMAGE)
         if not health.healthy:
             aee.status = AgentEvalStatus.UNHEALTHY
@@ -513,6 +1025,8 @@ def run_agent(
                         agent_type=aee.agent_config.agent_type,
                         agent_model=aee.agent_config.agent_model,
                         effort=aee.agent_config.effort,
+                        agent_id=aee.agent_config.agent_id,
+                        capability_profile=aee.agent_config.capability_profile,
                         eval_number=eval_exec.eval.number,
                         run_number=1,
                         attempt_number=1,
@@ -526,11 +1040,12 @@ def run_agent(
                             timed_out=False,
                             container=None,
                             log=log,
+                            redactions=redactions,
                         )
                     except BaseException as capture_error:
                         log.warning(
                             "Failure diagnostics could not be captured: %s",
-                            capture_error,
+                            redact_secrets(str(capture_error), redactions),
                         )
                 raise
 
@@ -550,6 +1065,8 @@ def run_agent(
                             agent_type=aee.agent_config.agent_type,
                             agent_model=aee.agent_config.agent_model,
                             effort=aee.agent_config.effort,
+                            agent_id=aee.agent_config.agent_id,
+                            capability_profile=aee.agent_config.capability_profile,
                             eval_number=eval_exec.eval.number,
                             run_number=run_number,
                             attempt_number=retry_number + 1,
@@ -561,6 +1078,10 @@ def run_agent(
                         "logger": log,
                         "session_id": session_id,
                     }
+                    if variant is not None:
+                        runner_kwargs["agent_variant"] = variant
+                    if profile is not None and not profile.is_empty:
+                        runner_kwargs["capability_profile"] = profile
                     if attempt_dir is not None:
                         runner_kwargs["diagnostics_dir"] = attempt_dir
                     docker_runner = DockerRunner(**runner_kwargs)
@@ -573,7 +1094,8 @@ def run_agent(
                         )
                         break
                     except Exception as error:
-                        eval_exec.last_error = f"{type(error).__name__}: {error}"
+                        safe_error = redact_secrets(str(error), redactions)
+                        eval_exec.last_error = f"{type(error).__name__}: {safe_error}"
                         if retry_number >= aee.agent_config.eval_retries:
                             eval_exec.status = EvalExecutionStatus.FAILED
                             raise
@@ -604,7 +1126,8 @@ def run_agent(
     except Exception:
         # Mark the agent FAILED, surface it to the live display, then let the
         # exception propagate so run_session can collect it off the future.
-        log.exception(f"Agent {aee.agent_config.agent_type}-{aee.agent_config.agent_model} failed")
+        safe_traceback = redact_secrets(traceback.format_exc(), redactions).rstrip()
+        log.error("Agent %s failed\n%s", agent_label(aee.agent_config), safe_traceback)
         aee.status = AgentEvalStatus.FAILED
         progress.put("update")
         raise
@@ -641,6 +1164,7 @@ def run_session(
     max_workers: int,
     run_dir=None,
     session_id: UUID | None = None,
+    capability_profiles: dict[str, CapabilityProfile] | None = None,
 ) -> list[AgentEvalExecution]:
     """Run every agent/processing group in parallel, one worker thread per agent."""
     progress: Queue = Queue()
@@ -650,18 +1174,31 @@ def run_session(
     def _run_chain(chain):
         for aee in chain:
             try:
-                run_agent(aee, progress, run_dir, session_id, image_resolver)
+                if capability_profiles is None:
+                    run_agent(aee, progress, run_dir, session_id, image_resolver)
+                else:
+                    run_agent(
+                        aee,
+                        progress,
+                        run_dir,
+                        session_id,
+                        image_resolver,
+                        capability_profiles,
+                    )
             except Exception as e:
+                profile = (capability_profiles or {}).get(aee.agent_config.capability_profile)
+                redactions = profile.redaction_values() if profile is not None else ()
                 logger.error(
-                    f"Agent {aee.agent_config.agent_type}-{aee.agent_config.agent_model} "
-                    f"failed: {e!r}"
+                    "Agent %s failed: %s",
+                    agent_label(aee.agent_config),
+                    redact_secrets(repr(e), redactions),
                 )
                 # this is fine because in run agent we are making it as FAILED so can swallow it
                 continue
             if aee.status == AgentEvalStatus.UNHEALTHY:
                 logger.error(
-                    f"Agent {aee.agent_config.agent_type}-{aee.agent_config.agent_model} "
-                    f"skipped as unhealthy before any evals ran"
+                    f"Agent {agent_label(aee.agent_config)} skipped as unhealthy "
+                    "before any evals ran"
                 )
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:

@@ -27,6 +27,11 @@ follow the [eval interpretation skill](../eval_interpretation/SKILL.md).
    `EVAL_HARNESS_AGENT_PID_NAMESPACE_ISOLATION=true`. It needs no eval changes, but disables
    Docker's default seccomp filter for health-check and evaluation containers. See the
    [configuration guide](../../docs/config.md#agent-pid-namespace-isolation).
+5. If an agent uses a capability profile, ensure its selected eval image contains
+   `agent-shell-py` 0.4.0 or newer and any MCP server prerequisites. Capability setup runs inside
+   the eval image before `arrange`; it is not applied to the base health-check image. Private
+   credential mounts require the host UID to match the image's `node` UID (1000 in the supplied
+   image); mismatches fail during provisioning.
 
 ## Compose the evaluation file
 An evaluation file lists `evals` and `agents`; every agent runs every eval (a full cross
@@ -44,6 +49,10 @@ composing a run:
   comparing agents.
 - `effort` is optional but is appended to log filenames and recorded in the results, so use it
   to keep two entries with the same `agent_type` and `agent_model` distinguishable.
+- `id` is an optional safe variant label. Use explicit IDs for baseline/treatment pairs; the
+  selected `capability_profile` and an export-safe capability manifest are recorded in results.
+  Profiles are additive, so an empty `base` profile does not remove capabilities from the image or
+  eval. Do not use an eval that configures the treatment itself for a clean A/B comparison.
 - `processing_group` serialises agents that share a backend (e.g. one local inference server);
   ungrouped agents run in parallel up to `EVAL_HARNESS_MAX_AGENT_CONCURRENCY`.
 - OpenCode models must exist as `provider/model` in
@@ -77,7 +86,8 @@ uv run main.py \
 
 The TUI currently writes JSON results. The `--results_format` option applies to headless runs.
 
-Phase timeouts default to 3600s (arrange), 3600s (act) and 600s (score) and are overridable via
+Phase timeouts default to 600s (capability setup), 3600s (arrange), 3600s (act) and 600s
+(score) and are overridable via
 environment variables - see [Configuration](../../docs/config.md#application-configuration).
 
 ## Monitor the run

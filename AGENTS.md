@@ -45,9 +45,18 @@ Before evals run, each agent/model is gated by a health check (`DockerRunner.hea
 
 The harness passes `AGENT_TYPE` and `AGENT_MODEL` to the container via env vars; `act()` reads them
 and builds an `AgentShell` from `agent_shell` (the unified CLI-agent wrapper installed in the image).
+Credential/configuration files are staged privately; the supplied image runs `node` as UID 1000,
+so a different host UID is rejected before a private bind mount can produce an unreadable run.
 `EVAL_HARNESS_AGENT_PID_NAMESPACE_ISOLATION=true` applies AgentShell PID-namespace isolation to
 health checks and evals without requiring changes to individual evals. It also runs those containers
 with `seccomp=unconfined`; the security trade-off is documented in `docs/config.md`.
+
+Configuration may define reusable `capability_profiles`, then assign one to each agent. The
+DockerRunner applies a profile in the fresh evaluation container before `arrange`, so an eval can
+be compared with and without extra Pi packages or supported-agent MCP registrations. Profiles are
+additive: `base` does not remove capabilities supplied by an image or by the eval itself. Pi
+supports packages but not MCP; custom images using profiles must include `agent-shell-py` 0.4.0+.
+The selected profile and an export-safe manifest are recorded with results.
 
 Evaluation configuration files live under `EVAL_CONFIG_DIR` (default `eval_configs`) and are
 listed by the interactive TUI. The tracked examples are `evals.example.json`, containing all
@@ -63,6 +72,8 @@ Each example evaluation maps to a pattern documented in
 Pi has no native MCP support, so it cannot run MCP-backed evaluations such as
 `encode_repo_forgetful`. Cursor MCP add/remove/list is supported (AgentShell edits
 `~/.cursor/mcp.json`); Cursor still has no per-call `disallowed_tools`.
+An eval that configures a capability itself is not a capability-neutral A/B task; use a separate
+profile-neutral eval when measuring the effect of a profile.
 
 Any change to the eval architecture or its constraints (the protocol, method extraction, embedded
 values) must include a review and update of README.md, AGENTS.md and the skills under `skills/`.

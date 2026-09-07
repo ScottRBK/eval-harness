@@ -15,6 +15,7 @@ ordering of ``progress`` events the threaded drain loop consumes.
 import json
 import logging
 import os
+import signal
 import subprocess
 import sys
 import threading
@@ -32,14 +33,24 @@ from agent_shell.models.agent import AgentType, HealthCheckResult
 
 from src.config.settings import settings
 from src.evaluation_file_protocol import EvaluationFile
-from src.evals_engine import run_agent, run_session, _load_eval_class, _method_to_script
+from src.evals_engine import (
+    _cleanup_eval_containers,
+    _load_eval_class,
+    _method_to_script,
+    run_agent,
+    run_evals,
+    run_session,
+)
 from src.models import (
     AgentConfig,
     AgentEvalExecution,
+    CapabilityProfile,
     AgentEvalStatus,
     DockerRunResult,
     Eval,
     EvalExecution,
+    EvalSession,
+    ResultFormat,
 )
 
 
@@ -110,6 +121,8 @@ def fake_runner(monkeypatch):
         recorder = SimpleNamespace(
             constructed=[],
             efforts=[],
+            variants=[],
+            capability_profiles=[],
             session_ids=[],
             diagnostic_dirs=[],
             calls=[],
@@ -127,9 +140,13 @@ def fake_runner(monkeypatch):
             logger=None,
             session_id=None,
             diagnostics_dir=None,
+            agent_variant=None,
+            capability_profile=None,
         ):
             recorder.constructed.append((agent_type, agent_model))
             recorder.efforts.append(agent_effort)
+            recorder.variants.append(agent_variant)
+            recorder.capability_profiles.append(capability_profile)
             recorder.session_ids.append(session_id)
             recorder.diagnostic_dirs.append(diagnostics_dir)
 
@@ -268,6 +285,66 @@ def recording_run_agent(monkeypatch):
 
 
 # --------------------------------------------------------------------------- #
+def test_cleanup_only_removes_active_session_containers(monkeypatch):
+    # Arrange
+    import src.evals_engine as engine
+
+    session_id = uuid4()
+    client = mock.Mock()
+    container = mock.Mock()
+    client.containers.list.return_value = [container]
+    monkeypatch.setattr(engine, "_ACTIVE_SESSION_ID", session_id)
+
+    # Act / Assert
+    with mock.patch("src.evals_engine.docker.from_env", return_value=client):
+        with pytest.raises(KeyboardInterrupt):
+            _cleanup_eval_containers(None, None)
+
+    client.containers.list.assert_called_once_with(
+        filters={"label": f"com.eval-harness.session={session_id}"},
+        all=True,
+    )
+    container.remove.assert_called_once_with(force=True)
+
+
+def test_run_evals_restores_signal_handlers_after_session(tmp_path, monkeypatch):
+    # Arrange
+    import src.evals_engine as engine
+
+    old_handlers = {signal.SIGINT: object(), signal.SIGTERM: object()}
+    installed_handlers = dict(old_handlers)
+    registrations = []
+
+    def fake_signal(signum, handler):
+        previous = installed_handlers[signum]
+        installed_handlers[signum] = handler
+        registrations.append((signum, handler))
+        return previous
+
+    monkeypatch.setattr(engine.signal, "signal", fake_signal)
+    monkeypatch.setattr(engine, "run_session", lambda **kwargs: [])
+    session = EvalSession(
+        session_id=uuid4(),
+        evals=[],
+        agents=[],
+        result_format=ResultFormat.JSON,
+        eval_file=str(tmp_path / "evals.json"),
+        run_dir=tmp_path / "run",
+    )
+
+    # Act
+    run_evals(session, [], Path(session.eval_file))
+
+    # Assert
+    assert registrations == [
+        (signal.SIGINT, engine._cleanup_eval_containers),
+        (signal.SIGTERM, engine._cleanup_eval_containers),
+        (signal.SIGINT, old_handlers[signal.SIGINT]),
+        (signal.SIGTERM, old_handlers[signal.SIGTERM]),
+    ]
+    assert engine._ACTIVE_SESSION_ID is None
+
+
 # A. run_agent — orchestration over one agent's evals (single thread)
 # --------------------------------------------------------------------------- #
 
@@ -384,6 +461,64 @@ class TestRunAgent:
         # Assert — the pre-flight health probe + one per-eval runner, all built
         # for this agent's type/model
         assert recorder.constructed == [(AgentType.OPENCODE, "m-x")] * 3
+
+    def test_forwards_capability_profile_and_variant_to_the_runner(
+        self, fake_runner, fake_eval_loading
+    ):
+        # Arrange
+        fake_eval_loading()
+        recorder = fake_runner([(1.0, 1.0)])
+        aee = _make_aee(["e1"], agent_type=AgentType.PI, agent_model="m-x")
+        aee.agent_config.agent_id = "pi-with-tools"
+        aee.agent_config.capability_profile = "pi-tools"
+        profile = CapabilityProfile(packages=("npm:tools@1.2.3",))
+
+        # Act
+        run_agent(aee, Queue(), capability_profiles={"pi-tools": profile})
+
+        # Assert — both the health probe and the eval runner use the same
+        # identity, while only the eval runner receives the setup profile.
+        assert recorder.variants == ["pi-with-tools", "pi-with-tools"]
+        assert recorder.capability_profiles == [None, profile]
+
+    def test_rejects_missing_capability_profile_map(self, fake_runner, fake_eval_loading):
+        # Arrange
+        fake_eval_loading()
+        recorder = fake_runner([(1.0, 1.0)])
+        aee = _make_aee(["e1"], agent_type=AgentType.PI, agent_model="m-x")
+        aee.agent_config.capability_profile = "pi-tools"
+
+        # Act / Assert
+        with pytest.raises(ValueError, match="Capability profile 'pi-tools' was not provided"):
+            run_agent(aee, Queue())
+        assert recorder.health_calls == []
+
+    def test_redacts_capability_secret_from_eval_error_metadata(
+        self, fake_runner, fake_eval_loading, caplog
+    ):
+        # Arrange
+        fake_eval_loading()
+        secret = "agent-error-secret"
+        fake_runner([RuntimeError(f"runner failed with {secret}")])
+        aee = _make_aee(["e1"], agent_type=AgentType.OPENCODE, agent_model="m-x")
+        aee.agent_config.capability_profile = "tools"
+        profile = CapabilityProfile(
+            mcp_servers=(
+                {
+                    "name": "server",
+                    "type": "stdio",
+                    "command": "server",
+                    "env": {"TOKEN": secret},
+                },
+            )
+        )
+
+        # Act / Assert
+        with caplog.at_level(logging.ERROR, logger="src.evals_engine"):
+            with pytest.raises(RuntimeError):
+                run_agent(aee, Queue(), capability_profiles={"tools": profile})
+        assert secret not in (aee.evals_executions[0].last_error or "")
+        assert secret not in caplog.text
 
     def test_forwards_agent_effort_to_the_runner(self, fake_runner, fake_eval_loading):
         # Arrange — the configured reasoning effort must reach DockerRunner, which

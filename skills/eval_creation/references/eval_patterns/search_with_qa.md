@@ -20,6 +20,11 @@ When building a similar evaluation, then you will want to use a private reposito
 For the knowledge base I am using the [forgetful](https://github.com/ScottRBK/forgetful) which is my
 own MCP memory system for AI Agents. 
 
+This eval registers its MCP server inside `arrange`, so it is intentionally not capability-neutral:
+using an empty capability profile does not create a genuine no-MCP baseline for this task. For an
+A/B capability comparison, move the registration into a harness capability profile and use a
+profile-neutral eval, or clearly treat this eval's built-in registration as part of both variants.
+
 The evaluation as well also demonstrates how you can use [agent-shell](https://github.com/ScottRBK/agent-shell)
 to add and list MCP servers to AI CLI clients and also how to disable certain tools. The ability to 
 test agent harnesses with and without certain tools is really powerful.

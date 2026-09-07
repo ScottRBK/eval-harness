@@ -1,6 +1,7 @@
 import tempfile
 import os
 import shutil
+import json
 import docker
 import time
 import logging
@@ -9,19 +10,23 @@ from agent_shell.models.agent import AgentType, HealthCheckResult
 
 from uuid import UUID
 
-from src.models import AgentProvisioning, DockerRunResult
+from src.models import AgentProvisioning, CapabilityProfile, DockerRunResult
 from src.config.settings import settings
 from src.failure_diagnostics import (
     TRACE_ENV,
     TRACE_PATH,
     capture_failure_diagnostics,
 )
-from src.helpers.naming import safe_name
+from src.helpers.naming import agent_identity, safe_name
+from src.helpers.redaction import redact_secrets
 
 _SESSION_LABEL = "com.eval-harness.session"
 _TOKEN_MARKER = "EVAL_TOTAL_TOKENS="
 _AGENT_SHELL_ISOLATION_ENV = "AGENTSHELL_ISOLATION_POLICY"
 _PID_NAMESPACE_ISOLATION = "linux-pid-namespace"
+_CAPABILITY_SPEC_PATH = "/tmp/eval-harness-capabilities.json"  # noqa: S108 - container path
+_CAPABILITY_TIMEOUT_ENV = "CAPABILITY_SETUP_TIMEOUT_SECONDS"
+_CONTAINER_NODE_UID = 1000
 
 
 def _agent_isolation_environment() -> dict[str, str]:
@@ -67,7 +72,11 @@ def build_image(dockerfile: Path, tag: str, log: logging.Logger) -> str:
     return tag
 
 
-def _parse_total_tokens(buffer: str, log: logging.Logger) -> int:
+def _parse_total_tokens(
+    buffer: str,
+    log: logging.Logger,
+    redactions: tuple[str, ...] = (),
+) -> int:
     total_tokens = 0
     for line in buffer.splitlines():
         if not line.startswith(_TOKEN_MARKER):
@@ -76,8 +85,60 @@ def _parse_total_tokens(buffer: str, log: logging.Logger) -> int:
         try:
             total_tokens += int(raw)
         except ValueError:
-            log.warning("Ignoring malformed token marker line: %r", line)
+            log.warning(
+                "Ignoring malformed token marker line: %r",
+                redact_secrets(line, redactions),
+            )
     return total_tokens
+
+
+def _capability_setup_script() -> str:
+    """Build a setup script that reads its profile from a private container file."""
+    return (
+        "import asyncio\n"
+        "import json\n"
+        "import os\n"
+        "import time\n"
+        "from pathlib import Path\n"
+        "from agent_shell.models.agent import (\n"
+        "    AgentType,\n"
+        "    MCPServerSpec,\n"
+        "    MCPServerType,\n"
+        "    PackageSpec,\n"
+        ")\n"
+        "from agent_shell.shell import AgentShell\n"
+        f"CAPABILITY_SPEC_PATH = {_CAPABILITY_SPEC_PATH!r}\n"
+        "\n"
+        "async def _main():\n"
+        "    spec_path = Path(CAPABILITY_SPEC_PATH)\n"
+        "    data = json.loads(spec_path.read_text(encoding='utf-8'))\n"
+        "    spec_path.write_text('{}', encoding='utf-8')\n"
+        "    packages = data['packages']\n"
+        "    mcp_servers = data['mcp_servers']\n"
+        f"    deadline = time.monotonic() + float(os.environ[{_CAPABILITY_TIMEOUT_ENV!r}])\n"
+        "    shell = AgentShell(agent_type=AgentType(os.environ['AGENT_TYPE']))\n"
+        "    for source in packages:\n"
+        "        remaining = deadline - time.monotonic()\n"
+        "        if remaining <= 0:\n"
+        "            raise TimeoutError('capability setup budget exhausted')\n"
+        "        await shell.add_package(PackageSpec(source=source), timeout=remaining)\n"
+        "    for raw in mcp_servers:\n"
+        "        spec = dict(raw)\n"
+        "        spec['type'] = MCPServerType(spec['type'])\n"
+        "        await shell.add_mcp_server(MCPServerSpec(**spec))\n"
+        "    if mcp_servers:\n"
+        "        configured_names = {server.name for server in await shell.list_mcp_servers()}\n"
+        "        requested_names = {server['name'] for server in mcp_servers}\n"
+        "        missing = requested_names - configured_names\n"
+        "        if missing:\n"
+        "            raise RuntimeError(f'MCP registration missing: {sorted(missing)!r}')\n"
+        "    print(\n"
+        "        f'capabilities configured: {len(packages)} package(s), '\n"
+        "        f'{len(mcp_servers)} MCP server(s)'\n"
+        "    )\n"
+        "\n"
+        "asyncio.run(_main())\n"
+    )
 
 
 class DockerRunner:
@@ -89,16 +150,67 @@ class DockerRunner:
         logger: logging.Logger | None = None,
         session_id: UUID | None = None,
         diagnostics_dir: Path | None = None,
+        agent_variant: str | None = None,
+        capability_profile: CapabilityProfile | None = None,
     ):
         self._agent_type = agent_type
         self._agent_model = agent_model
         self._agent_effort = agent_effort
+        self._agent_variant = agent_variant
+        self._capability_profile = capability_profile
         # Per-agent logger when the engine injects one; module logger otherwise.
         self._log = logger or logging.getLogger(__name__)
         # Throwaway dirs we create for credentials; deleted after the run.
         self._temp_dirs: list[Path] = []
         self._session_id = session_id
         self._diagnostics_dir = diagnostics_dir
+
+    def _identity(self) -> str:
+        return agent_identity(
+            self._agent_type,
+            self._agent_model,
+            self._agent_effort,
+            self._agent_variant,
+        )
+
+    def _container_name(self, prefix: str) -> str:
+        session_suffix = f"_{self._session_id}" if self._session_id is not None else ""
+        return safe_name(f"{prefix}_{self._identity()}{session_suffix}")
+
+    def _capability_secrets(self) -> tuple[str, ...]:
+        if self._capability_profile is None:
+            return ()
+        return self._capability_profile.redaction_values()
+
+    @staticmethod
+    def _ensure_private_mount_uid() -> None:
+        """Fail clearly rather than bind private files unreadable by container user node."""
+        getuid = getattr(os, "getuid", None)
+        if getuid is not None and getuid() != _CONTAINER_NODE_UID:
+            raise RuntimeError(
+                "Private Docker mounts require host UID "
+                f"{_CONTAINER_NODE_UID}, matching the image's node user"
+            )
+
+    def _stage_capability_profile(self) -> dict[str, dict[str, str]]:
+        if self._capability_profile is None or self._capability_profile.is_empty:
+            return {}
+        self._ensure_private_mount_uid()
+        staging = Path(tempfile.mkdtemp(prefix="eval-capabilities-"))
+        self._temp_dirs.append(staging)
+        os.chmod(staging, 0o700)
+        spec = staging / "capabilities.json"
+        spec.write_text(
+            json.dumps(
+                {
+                    "packages": list(self._capability_profile.packages),
+                    "mcp_servers": list(self._capability_profile.mcp_servers),
+                }
+            ),
+            encoding="utf-8",
+        )
+        os.chmod(spec, 0o600)
+        return {str(spec): {"bind": _CAPABILITY_SPEC_PATH, "mode": "rw"}}
 
     def _staged_mount(self, files: list[Path], container_dir: str) -> dict[str, dict[str, str]]:
         """Copy files into a throwaway dir and bind that dir read-write.
@@ -108,15 +220,40 @@ class DockerRunner:
         secrets and the version-controlled repo config) are copies, so they are
         never touched. The temp dir is tracked so the run can delete it after.
         """
+        self._ensure_private_mount_uid()
         staging = Path(tempfile.mkdtemp(prefix="eval-mount-"))
-        # Allow the container node user to traverse the throwaway host bind mount.
-        os.chmod(staging, 0o777)  # noqa: S103 - required for cross-UID Docker binds
+        self._temp_dirs.append(staging)
+        # The base image runs as the same UID as the host user. Keep staged
+        # credentials/configuration private while still allowing that user to read them.
+        os.chmod(staging, 0o700)
         for source in files:
             shutil.copy2(source, staging / source.name)
-            os.chmod(staging / source.name, 0o644)
-        self._temp_dirs.append(staging)
+            os.chmod(staging / source.name, 0o600)
 
         return {str(staging): {"bind": container_dir, "mode": "rw"}}
+
+    def _staged_file_mounts(
+        self,
+        files: list[Path],
+        container_dir: str,
+        target_names: list[str] | None = None,
+    ) -> dict[str, dict[str, str]]:
+        """Bind individual files so image-provided sibling files remain visible."""
+        if target_names is not None and len(target_names) != len(files):
+            raise ValueError("target_names must match files")
+        self._ensure_private_mount_uid()
+        staging = Path(tempfile.mkdtemp(prefix="eval-mount-"))
+        self._temp_dirs.append(staging)
+        os.chmod(staging, 0o700)
+        mounts = {}
+        for index, source in enumerate(files):
+            staged = staging / source.name
+            shutil.copy2(source, staged)
+            os.chmod(staged, 0o600)
+            target_name = target_names[index] if target_names is not None else source.name
+            target = f"{container_dir.rstrip('/')}/{target_name}"
+            mounts[str(staged)] = {"bind": target, "mode": "rw"}
+        return mounts
 
     def _setup_codex(self) -> AgentProvisioning:
         auth = Path(settings.CODEX_CREDENTIALS_LOC).expanduser()
@@ -138,7 +275,7 @@ class DockerRunner:
             candidate = agent_dir / name
             if candidate.is_file():
                 files.append(candidate)
-        return AgentProvisioning(volumes=self._staged_mount(files, "/home/node/.pi/agent"))
+        return AgentProvisioning(volumes=self._staged_file_mounts(files, "/home/node/.pi/agent"))
 
     def _setup_grok(self) -> AgentProvisioning:
         # Grok's installer puts the binary at ~/.grok/bin. Stage auth as a *file*
@@ -146,14 +283,8 @@ class DockerRunner:
         auth = Path(settings.GROK_CREDENTIALS_LOC).expanduser()
         if not auth.exists():
             raise RuntimeError(f"Grok auth file not found at {auth} (run `grok login` on the host)")
-        staging = Path(tempfile.mkdtemp(prefix="eval-mount-"))
-        os.chmod(staging, 0o777)  # noqa: S103 - required for cross-UID Docker binds
-        staged = staging / auth.name
-        shutil.copy2(auth, staged)
-        os.chmod(staged, 0o644)
-        self._temp_dirs.append(staging)
         return AgentProvisioning(
-            volumes={str(staged): {"bind": "/home/node/.grok/auth.json", "mode": "rw"}}
+            volumes=self._staged_file_mounts([auth], "/home/node/.grok", target_names=["auth.json"])
         )
 
     def _setup_cursor(self) -> AgentProvisioning:
@@ -258,40 +389,38 @@ class DockerRunner:
         )
 
         client = docker.from_env()
-        prov = self._provision_agent()  # raises on missing creds -> FAILED
-        effort_suffix = f"_{self._agent_effort}" if self._agent_effort else ""
-        container_name = safe_name(
-            f"eval_harness_health_{self._agent_type.value}_{self._agent_model}{effort_suffix}"
-        )
+        container = None
+        container_name = self._container_name("eval_harness_health")
+        timeout_seconds = settings.HEALTH_CHECK_TIMEOUT_SECONDS
         try:
-            client.containers.get(container_name).remove(force=True)
-        except docker.errors.NotFound:
-            pass
+            prov = self._provision_agent()  # raises on missing creds -> FAILED
+            try:
+                client.containers.get(container_name).remove(force=True)
+            except docker.errors.NotFound:
+                pass
 
-        labels = {}
-        if self._session_id is not None:
-            labels[_SESSION_LABEL] = str(self._session_id)
+            labels = {}
+            if self._session_id is not None:
+                labels[_SESSION_LABEL] = str(self._session_id)
 
-        container = client.containers.run(
-            image=image,
-            command=["sleep", "infinity"],
-            volumes=prov.volumes,
-            environment={
-                "AGENT_TYPE": self._agent_type.value,
-                "AGENT_MODEL": self._agent_model,
-                "AGENT_EFFORT": self._agent_effort or "",
-                "HEALTH_CHECK_TIMEOUT_SECONDS": str(settings.HEALTH_CHECK_TIMEOUT_SECONDS),
-                **prov.environment,
-                **_agent_isolation_environment(),
-            },
-            **_agent_isolation_container_options(),
-            detach=True,
-            name=container_name,
-            labels=labels,
-        )
+            container = client.containers.run(
+                image=image,
+                command=["sleep", "infinity"],
+                volumes=prov.volumes,
+                environment={
+                    "AGENT_TYPE": self._agent_type.value,
+                    "AGENT_MODEL": self._agent_model,
+                    "AGENT_EFFORT": self._agent_effort or "",
+                    "HEALTH_CHECK_TIMEOUT_SECONDS": str(timeout_seconds),
+                    **prov.environment,
+                    **_agent_isolation_environment(),
+                },
+                **_agent_isolation_container_options(),
+                detach=True,
+                name=container_name,
+                labels=labels,
+            )
 
-        try:
-            timeout_seconds = settings.HEALTH_CHECK_TIMEOUT_SECONDS
             # `timeout` enforces the wall clock in-container; exec_run blocks
             # until the exec finishes so no client-side streaming loop needed.
             cmd = [
@@ -308,26 +437,61 @@ class DockerRunner:
                 output.decode(errors="replace") if isinstance(output, bytes) else (output or "")
             )
         finally:
-            try:
-                container.stop(timeout=5)
-                container.remove()
-            except docker.errors.NotFound:
-                pass
+            if container is not None:
+                try:
+                    container.stop(timeout=5)
+                except docker.errors.NotFound:
+                    pass
+                except Exception as cleanup_error:
+                    self._log.warning(
+                        "Docker health-check stop failed: %s",
+                        redact_secrets(str(cleanup_error), self._capability_secrets()),
+                    )
+                try:
+                    container.remove(force=True)
+                except docker.errors.NotFound:
+                    pass
+                except Exception as cleanup_error:
+                    self._log.warning(
+                        "Docker health-check remove failed: %s",
+                        redact_secrets(str(cleanup_error), self._capability_secrets()),
+                    )
+            else:
+                try:
+                    orphan = client.containers.get(container_name)
+                except docker.errors.NotFound:
+                    orphan = None
+                except Exception as cleanup_error:
+                    self._log.warning(
+                        "Docker health-check orphan lookup failed: %s",
+                        redact_secrets(str(cleanup_error), self._capability_secrets()),
+                    )
+                    orphan = None
+                if orphan is not None:
+                    try:
+                        orphan.remove(force=True)
+                    except docker.errors.NotFound:
+                        pass
+                    except Exception as cleanup_error:
+                        self._log.warning(
+                            "Docker health-check orphan removal failed: %s",
+                            redact_secrets(str(cleanup_error), self._capability_secrets()),
+                        )
             # probe is a throwaway DockerRunner; clean its staged credential
             # copies so an unhealthy probe doesn't leak secrets on the host.
             for d in self._temp_dirs:
                 shutil.rmtree(d, ignore_errors=True)
-            self._temp_dirs.clear()
 
-        self._log.info(f"[health] {buffer.strip()}")
+        safe_buffer = redact_secrets(buffer, self._capability_secrets())
+        self._log.info(f"[health] {safe_buffer.strip()}")
 
         if exit_code in (124, 137):
             raise TimeoutError(f"health timed out after {timeout_seconds}s")
         if exit_code != 0:
-            raise RuntimeError(f"health crashed (exit {exit_code})\n{buffer}")
+            raise RuntimeError(f"health crashed (exit {exit_code})\n{safe_buffer}")
 
         healthy = exception = None
-        for line in buffer.splitlines():
+        for line in safe_buffer.splitlines():
             if line.startswith("HEALTHY="):
                 healthy = line.removeprefix("HEALTHY=").strip() == "True"
             elif line.startswith("EXCEPTION=") and exception is None:
@@ -355,14 +519,12 @@ class DockerRunner:
         score = 0.0
         total_tokens = 0
         time_start = 0.0
-        effort_suffix = f"_{self._agent_effort}" if self._agent_effort else ""
-        container_name = safe_name(
-            f"eval_harness_{self._agent_type.value}_{self._agent_model}{effort_suffix}"
-        )
+        container_name = self._container_name("eval_harness")
 
         try:
             client = docker.from_env()
             prov = self._provision_agent()
+            prov.volumes.update(self._stage_capability_profile())
             time_start = time.time()
             phase = "container"
 
@@ -379,6 +541,7 @@ class DockerRunner:
                 "AGENT_TYPE": self._agent_type.value,
                 "AGENT_MODEL": self._agent_model,
                 "AGENT_EFFORT": self._agent_effort or "",
+                "CAPABILITY_SETUP_TIMEOUT_SECONDS": str(settings.CAPABILITY_SETUP_TIMEOUT_SECONDS),
                 **({"GH_TOKEN": settings.GITHUB_TOKEN} if settings.GITHUB_TOKEN else {}),
                 **({"ADO_PAT": settings.AZURE_DEVOPS_PAT} if settings.AZURE_DEVOPS_PAT else {}),
                 **prov.environment,
@@ -399,16 +562,23 @@ class DockerRunner:
             )
 
             phase_timeouts = {
+                "capabilities": settings.CAPABILITY_SETUP_TIMEOUT_SECONDS,
                 "arrange": settings.ARRANGE_TIMEOUT_SECONDS,
                 "act": settings.ACT_TIMEOUT_SECONDS,
                 "score": settings.SCORE_TIMEOUT_SECONDS,
             }
-
-            for label, script in [
+            phase_scripts = [
                 ("arrange", arrange_script),
                 ("act", act_script),
                 ("score", score_script),
-            ]:
+            ]
+            if self._capability_profile and not self._capability_profile.is_empty:
+                phase_scripts.insert(
+                    0,
+                    ("capabilities", _capability_setup_script()),
+                )
+
+            for label, script in phase_scripts:
                 phase = label
                 exit_code = None
                 timed_out = False
@@ -437,11 +607,18 @@ class DockerRunner:
                         pending += text
                         while "\n" in pending:
                             line, pending = pending.split("\n", 1)
-                            self._log.info(f"[{label}] {line}")
+                            self._log.info(
+                                f"[{label}] {redact_secrets(line, self._capability_secrets())}"
+                            )
                     if pending.strip():
-                        self._log.info(f"[{label}] {pending}")
+                        self._log.info(
+                            f"[{label}] {redact_secrets(pending, self._capability_secrets())}"
+                        )
                 except Exception as e:
-                    self._log.error(f"Error streaming docker response: {e}")
+                    self._log.error(
+                        "Error streaming docker response: %s",
+                        redact_secrets(str(e), self._capability_secrets()),
+                    )
                 finally:
                     stream._response.close()
 
@@ -453,14 +630,19 @@ class DockerRunner:
                     raise TimeoutError(f"{label} timed out after {timeout_seconds}s")
 
                 if exit_code != 0:
+                    safe_buffer = redact_secrets(buffer, self._capability_secrets())
                     self._log.error(
                         f"{label} failed (exit {exit_code})\n"
-                        f"--- container output ---\n{buffer}\n"
+                        f"--- container output ---\n{safe_buffer}\n"
                         f"--- end container output ---"
                     )
                     raise RuntimeError(f"{label} failed (exit {exit_code})")
 
-                total_tokens += _parse_total_tokens(buffer, self._log)
+                total_tokens += _parse_total_tokens(
+                    buffer,
+                    self._log,
+                    self._capability_secrets(),
+                )
 
                 if label == "score":
                     for line in reversed(buffer.splitlines()):
@@ -469,8 +651,10 @@ class DockerRunner:
                             try:
                                 score = float(raw)
                             except ValueError as e:
+                                safe_line = redact_secrets(line, self._capability_secrets())
                                 raise RuntimeError(
-                                    f"Malformed score line {line!r}: expected EVAL_SCORE=<float>"
+                                    f"Malformed score line {safe_line!r}: "
+                                    "expected EVAL_SCORE=<float>"
                                 ) from e
                             self._log.info(f"Eval Score {score}")
                             break
@@ -491,19 +675,56 @@ class DockerRunner:
                         timed_out=timed_out,
                         container=container,
                         log=self._log,
+                        redactions=self._capability_secrets(),
                     )
                 except BaseException as capture_error:
                     self._log.warning(
                         "Failure diagnostics could not be captured: %s",
-                        capture_error,
+                        redact_secrets(str(capture_error), self._capability_secrets()),
                     )
 
             if container is not None:
                 try:
                     container.stop(timeout=5)
-                    container.remove()
                 except docker.errors.NotFound:
                     pass
+                except Exception as cleanup_error:
+                    self._log.warning(
+                        "Docker container stop failed: %s",
+                        redact_secrets(str(cleanup_error), self._capability_secrets()),
+                    )
+                try:
+                    container.remove(force=True)
+                except docker.errors.NotFound:
+                    pass
+                except Exception as cleanup_error:
+                    # Never replace the eval failure (or a successful score) with
+                    # a teardown error, but do leave an operator-visible warning.
+                    self._log.warning(
+                        "Docker container remove failed: %s",
+                        redact_secrets(str(cleanup_error), self._capability_secrets()),
+                    )
+            elif client is not None:
+                try:
+                    orphan = client.containers.get(container_name)
+                except docker.errors.NotFound:
+                    orphan = None
+                except Exception as cleanup_error:
+                    self._log.warning(
+                        "Docker orphan lookup failed: %s",
+                        redact_secrets(str(cleanup_error), self._capability_secrets()),
+                    )
+                    orphan = None
+                if orphan is not None:
+                    try:
+                        orphan.remove(force=True)
+                    except docker.errors.NotFound:
+                        pass
+                    except Exception as cleanup_error:
+                        self._log.warning(
+                            "Docker orphan removal failed: %s",
+                            redact_secrets(str(cleanup_error), self._capability_secrets()),
+                        )
             # Delete the throwaway staging dirs (credentials + config copies).
             # The repo's version-controlled config is the source, never these.
             for tmp_dir in self._temp_dirs:

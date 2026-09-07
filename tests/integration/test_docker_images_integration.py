@@ -23,7 +23,7 @@ import os
 from agent_shell.models.agent import AgentType
 from agent_shell.shell import AgentShell
 
-assert importlib.metadata.version('agent-shell-py') == '0.3.1'
+assert importlib.metadata.version('agent-shell-py') == '0.4.0'
 os.environ['AGENTSHELL_ISOLATION_POLICY'] = 'linux-pid-namespace'
 shell = AgentShell(agent_type=AgentType.CLAUDE_CODE)
 assert type(shell.isolation_policy).__name__ == 'LinuxPidNamespaceIsolation'

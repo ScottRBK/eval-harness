@@ -7,11 +7,13 @@ patched so no host secrets or files are required.
 
 import io
 import json
+import logging
 import stat
 import tarfile
 import tempfile
 from pathlib import Path
 from unittest import mock
+from uuid import uuid4
 
 import docker
 import pytest
@@ -19,6 +21,7 @@ from agent_shell.models.agent import AgentType
 
 from src.docker_runner import DockerRunner, build_image
 from src.failure_diagnostics import TRACE_ENV, TRACE_PATH
+from src.models import CapabilityProfile
 
 
 @pytest.fixture(autouse=True)
@@ -178,7 +181,7 @@ class TestStagedMount:
         assert spec == {"bind": "/container/dir", "mode": "rw"}
         assert (Path(staging) / "auth.json").read_text() == "secret"
 
-    def test_sets_mode_0o644_on_copied_files(self, tmp_path):
+    def test_sets_private_mode_on_copied_files(self, tmp_path):
         # Arrange
         runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
         source = tmp_path / "auth.json"
@@ -191,7 +194,7 @@ class TestStagedMount:
         # Assert
         staging = Path(next(iter(volumes)))
         mode = stat.S_IMODE((staging / "auth.json").stat().st_mode)
-        assert mode == 0o644
+        assert mode == 0o600
 
     def test_tracks_staging_dir_for_cleanup(self, tmp_path):
         # Arrange
@@ -205,6 +208,36 @@ class TestStagedMount:
         # Assert
         staging = Path(next(iter(volumes)))
         assert runner._temp_dirs == [staging]
+
+    def test_tracks_capability_staging_before_write_failure(self, monkeypatch):
+        # Arrange
+        runner = DockerRunner(
+            AgentType.CLAUDE_CODE,
+            "model",
+            capability_profile=CapabilityProfile(packages=("npm:tools@1.2.3",)),
+        )
+        monkeypatch.setattr(
+            Path,
+            "write_text",
+            mock.Mock(side_effect=OSError("capability staging failed")),
+        )
+
+        # Act / Assert
+        with pytest.raises(OSError, match="capability staging failed"):
+            runner._stage_capability_profile()
+        assert len(runner._temp_dirs) == 1
+        assert runner._temp_dirs[0].is_dir()
+
+    def test_private_mounts_reject_unaligned_host_uid(self, monkeypatch, tmp_path):
+        # Arrange
+        source = tmp_path / "auth.json"
+        source.write_text("secret")
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
+        monkeypatch.setattr("src.docker_runner.os.getuid", lambda: 2000)
+
+        # Act / Assert
+        with pytest.raises(RuntimeError, match=r"UID.*1000"):
+            runner._staged_mount([source], "/container/dir")
 
     def test_leaves_source_files_untouched(self, tmp_path):
         # Arrange
@@ -308,7 +341,7 @@ class TestProvisionAgent:
 
     def test_grok_provisions_auth_volume_not_environment(self, tmp_path, monkeypatch):
         # Arrange
-        auth = tmp_path / "grok" / "auth.json"
+        auth = tmp_path / "grok" / "grok-prod.json"
         auth.parent.mkdir()
         auth.write_text('{"grok": true}')
         monkeypatch.setattr("src.docker_runner.settings.GROK_CREDENTIALS_LOC", str(auth))
@@ -347,9 +380,9 @@ class TestProvisionAgent:
         # Assert — Pi authenticates via its staged auth.json, not an env var
         assert prov.environment == {}
         binds = {spec["bind"] for spec in prov.volumes.values()}
-        assert "/home/node/.pi/agent" in binds
+        assert "/home/node/.pi/agent/auth.json" in binds
 
-    def test_pi_mounts_model_files_alongside_auth(self, tmp_path, monkeypatch):
+    def test_pi_mounts_model_files_without_hiding_image_directory(self, tmp_path, monkeypatch):
         # Arrange — auth + custom provider model definitions next to it
         agent_dir = tmp_path / "pi"
         agent_dir.mkdir()
@@ -365,19 +398,18 @@ class TestProvisionAgent:
         # Act
         prov = runner._provision_agent()
 
-        # Assert — all three files staged into the single Pi bind mount so the
-        # container Pi can resolve custom providers (regression: only auth.json
-        # was mounted, so LAN models were reported "not found")
+        # Assert — each host file is mounted individually. This preserves any
+        # image-baked Pi packages/extensions in the rest of ~/.pi/agent.
         assert prov.environment == {}
-        assert len(prov.volumes) == 1
-        staging = Path(next(iter(prov.volumes)))
-        assert (staging / "auth.json").is_file()
-        assert (staging / "models.json").is_file()
-        assert (staging / "models-store.json").is_file()
-        assert next(iter(prov.volumes.values())) == {
-            "bind": "/home/node/.pi/agent",
-            "mode": "rw",
+        assert len(prov.volumes) == 3
+        binds = {spec["bind"] for spec in prov.volumes.values()}
+        assert binds == {
+            "/home/node/.pi/agent/auth.json",
+            "/home/node/.pi/agent/models.json",
+            "/home/node/.pi/agent/models-store.json",
         }
+        for source in prov.volumes:
+            assert Path(source).is_file()
 
     def test_pi_without_model_files_still_provisions_auth(self, pi_creds):
         # Arrange — host has only auth.json (no custom providers)
@@ -388,10 +420,10 @@ class TestProvisionAgent:
 
         # Assert — still provisions; model files are optional, not required
         assert prov.environment == {}
-        staging = Path(next(iter(prov.volumes)))
-        assert (staging / "auth.json").is_file()
-        assert not (staging / "models.json").exists()
-        assert not (staging / "models-store.json").exists()
+        assert len(prov.volumes) == 1
+        source, mount = next(iter(prov.volumes.items()))
+        assert Path(source).name == "auth.json"
+        assert mount == {"bind": "/home/node/.pi/agent/auth.json", "mode": "rw"}
 
     def test_pi_without_auth_file_raises(self, tmp_path, monkeypatch):
         # Arrange — point at a path that does not exist
@@ -547,6 +579,132 @@ class TestDockerRun:
                 "score-script",
             ],
         ]
+
+    def test_configures_capabilities_before_eval_phases(
+        self, pi_creds, make_docker_client, monkeypatch
+    ):
+        # Arrange
+        monkeypatch.setattr("src.docker_runner.settings.CAPABILITY_SETUP_TIMEOUT_SECONDS", 444)
+        monkeypatch.setattr("src.docker_runner.settings.ARRANGE_TIMEOUT_SECONDS", 111)
+        monkeypatch.setattr("src.docker_runner.settings.ACT_TIMEOUT_SECONDS", 222)
+        monkeypatch.setattr("src.docker_runner.settings.SCORE_TIMEOUT_SECONDS", 333)
+        profile = CapabilityProfile(packages=("npm:@example/tools@1.2.3",))
+        client = make_docker_client(
+            [
+                ("capabilities configured", 0),
+                ("arranged", 0),
+                ("acted", 0),
+                ("EVAL_SCORE=1.0", 0),
+            ]
+        )
+        runner = DockerRunner(
+            AgentType.PI,
+            "model",
+            agent_variant="pi-with-tools",
+            capability_profile=profile,
+        )
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            result = runner.docker_run("arrange-script", "act-script", "score-script", "img")
+
+        # Assert
+        assert result.score == 1.0
+        commands = [call.args[1] for call in client.api.exec_create.call_args_list]
+        assert [command[0:5] for command in commands] == [
+            ["timeout", "--kill-after=30s", "444", "python", "-u"],
+            ["timeout", "--kill-after=30s", "111", "python", "-u"],
+            ["timeout", "--kill-after=30s", "222", "python", "-u"],
+            ["timeout", "--kill-after=30s", "333", "python", "-u"],
+        ]
+        capability_script = commands[0][-1]
+        assert "await shell.add_package(PackageSpec(source=source" in capability_script
+        assert "await shell.add_mcp_server" in capability_script
+        assert "spec_path.write_text('{}'" in capability_script
+        assert "timeout=remaining" in capability_script
+        assert (
+            client.containers.run.call_args.kwargs["environment"][
+                "CAPABILITY_SETUP_TIMEOUT_SECONDS"
+            ]
+            == "444"
+        )
+        assert client.containers.run.call_args.kwargs["name"] == (
+            "eval_harness_pi_model_pi-with-tools"
+        )
+
+    def test_configures_mcp_without_putting_secret_in_exec_command(
+        self, opencode_creds, make_docker_client, caplog
+    ):
+        # Arrange
+        secret = "sentinel-mcp-secret"
+        profile = CapabilityProfile(
+            mcp_servers=(
+                {
+                    "name": "remote",
+                    "type": "stdio",
+                    "command": "mcp-server",
+                    "env": {"TOKEN": secret},
+                },
+            )
+        )
+        client = make_docker_client([(secret, 1), ("ok", 0), ("ok", 0)])
+        captured = {}
+
+        def _run(**kwargs):
+            captured["name"] = kwargs["name"]
+            for source, spec in kwargs["volumes"].items():
+                if spec["bind"] == "/tmp/eval-harness-capabilities.json":
+                    captured["payload"] = json.loads(Path(source).read_text())
+                    captured["mode"] = stat.S_IMODE(Path(source).stat().st_mode)
+            return client._container
+
+        client.containers.run.side_effect = _run
+        runner = DockerRunner(
+            AgentType.OPENCODE,
+            "model",
+            capability_profile=profile,
+        )
+
+        # Act / Assert
+        with caplog.at_level(logging.INFO, logger="src.docker_runner"):
+            with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+                with pytest.raises(RuntimeError, match="capabilities failed"):
+                    runner.docker_run("a", "b", "c", "img")
+
+        # The profile is delivered through a private temporary mount, not the
+        # Docker exec command or host logs. It is removed during teardown.
+        command = client.api.exec_create.call_args.args[1]
+        assert secret not in command[-1]
+        assert captured["payload"]["mcp_servers"][0]["env"]["TOKEN"] == secret
+        assert captured["mode"] == 0o600
+        capability_mount = next(
+            spec
+            for source, spec in client.containers.run.call_args.kwargs["volumes"].items()
+            if spec["bind"] == "/tmp/eval-harness-capabilities.json"
+        )
+        assert capability_mount["mode"] == "rw"
+        assert secret not in caplog.text
+        assert not any(
+            Path(source).exists() for source in client.containers.run.call_args.kwargs["volumes"]
+        )
+
+    def test_session_id_disambiguates_container_name(self, claude_token, make_docker_client):
+        # Arrange
+        session_id = uuid4()
+        client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        runner = DockerRunner(
+            AgentType.CLAUDE_CODE,
+            "model",
+            session_id=session_id,
+        )
+
+        # Act
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            runner.docker_run("a", "b", "c", "img")
+
+        # Assert
+        name = client.containers.run.call_args.kwargs["name"]
+        assert str(session_id) in name
 
     def test_passes_empty_agent_effort_env_when_unset(self, claude_token, make_docker_client):
         # Arrange — no effort configured. docker-py turns a None env *value* into a
@@ -714,6 +872,35 @@ class TestDockerRun:
             with pytest.raises(RuntimeError, match="EVAL_SCORE=pass"):
                 runner.docker_run("a", "b", "c", "img")
 
+    def test_malformed_score_does_not_expose_capability_secret(
+        self, opencode_creds, make_docker_client, caplog
+    ):
+        # Arrange
+        secret = "score-secret"
+        profile = CapabilityProfile(
+            mcp_servers=(
+                {
+                    "name": "server",
+                    "type": "stdio",
+                    "command": "server",
+                    "env": {"TOKEN": secret},
+                },
+            )
+        )
+        client = make_docker_client(
+            [("configured", 0), ("arranged", 0), ("acted", 0), (f"EVAL_SCORE={secret}", 0)]
+        )
+        runner = DockerRunner(AgentType.OPENCODE, "model", capability_profile=profile)
+
+        # Act / Assert
+        with caplog.at_level(logging.INFO, logger="src.docker_runner"):
+            with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+                with pytest.raises(RuntimeError) as error:
+                    runner.docker_run("a", "b", "c", "img")
+
+        assert secret not in str(error.value)
+        assert secret not in caplog.text
+
     def test_nonzero_phase_exit_raises_runtimeerror(self, claude_token, make_docker_client):
         # Arrange — arrange phase exits non-zero
         client = make_docker_client([("boom", 1), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
@@ -767,6 +954,31 @@ class TestDockerRun:
         client._container.get_archive.assert_called_once_with(TRACE_PATH)
         client._container.stop.assert_called_once()
         client._container.remove.assert_called_once()
+
+    def test_container_launch_failure_removes_orphaned_container(
+        self, claude_token, make_docker_client
+    ):
+        # Arrange
+        client = make_docker_client([("ok", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)])
+        orphan = mock.Mock()
+        get_calls = 0
+
+        def get_container(_name):
+            nonlocal get_calls
+            get_calls += 1
+            if get_calls == 1:
+                raise docker.errors.NotFound("absent")
+            return orphan
+
+        client.containers.get.side_effect = get_container
+        client.containers.run.side_effect = RuntimeError("container startup failed")
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
+
+        # Act / Assert
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            with pytest.raises(RuntimeError, match="container startup failed"):
+                runner.docker_run("a", "b", "c", "img")
+        orphan.remove.assert_called_once_with(force=True)
 
     def test_container_launch_failure_writes_manifest_without_exit_code(
         self, claude_token, make_docker_client, monkeypatch, tmp_path
@@ -944,6 +1156,39 @@ class TestDockerRun:
         client._container.stop.assert_called_once()
         client._container.remove.assert_called_once()
 
+    def test_staging_cleanup_survives_container_cleanup_error(
+        self, opencode_creds, make_docker_client, caplog
+    ):
+        # Arrange
+        secret = 'cleanup"secret'
+        profile = CapabilityProfile(
+            mcp_servers=(
+                {
+                    "name": "server",
+                    "type": "stdio",
+                    "command": "server",
+                    "env": {"TOKEN": secret},
+                },
+            )
+        )
+        client = make_docker_client(
+            [("configured", 0), ("ok", 0), ("ok", 0), ("EVAL_SCORE=1.0", 0)]
+        )
+        client._container.stop.side_effect = RuntimeError(f"stop failed: {secret}")
+        runner = DockerRunner(AgentType.OPENCODE, "model", capability_profile=profile)
+
+        # Act
+        with caplog.at_level(logging.WARNING, logger="src.docker_runner"):
+            with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+                result = runner.docker_run("a", "b", "c", "img")
+
+        # Assert — a Docker teardown problem must not strand credential staging dirs
+        assert result.score == 1.0
+        assert runner._temp_dirs
+        assert all(not d.exists() for d in runner._temp_dirs)
+        client._container.remove.assert_called_once_with(force=True)
+        assert secret not in caplog.text
+
     def test_stream_response_closed_even_when_streaming_raises(
         self, claude_token, make_docker_client
     ):
@@ -1092,6 +1337,31 @@ class TestHealthCheck:
         assert options["security_opt"] == ["seccomp=unconfined"]
         assert options["environment"]["AGENTSHELL_ISOLATION_POLICY"] == "linux-pid-namespace"
 
+    def test_health_startup_failure_cleans_staged_credentials(self, opencode_creds):
+        # Arrange
+        client = _fake_exec_run_client((0, b"HEALTHY=True\n"))
+        orphan = mock.Mock()
+        get_calls = 0
+
+        def get_container(_name):
+            nonlocal get_calls
+            get_calls += 1
+            if get_calls == 1:
+                raise docker.errors.NotFound("absent")
+            return orphan
+
+        client.containers.get.side_effect = get_container
+        client.containers.run.side_effect = RuntimeError("container launch failed")
+        runner = DockerRunner(AgentType.OPENCODE, "model")
+
+        # Act / Assert
+        with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+            with pytest.raises(RuntimeError, match="container launch failed"):
+                runner.health_check("img")
+        assert runner._temp_dirs
+        assert all(not directory.exists() for directory in runner._temp_dirs)
+        orphan.remove.assert_called_once_with(force=True)
+
     def test_unhealthy_verdict_parses_from_markers_and_does_not_raise(
         self, claude_token, health_timeout
     ):
@@ -1109,6 +1379,31 @@ class TestHealthCheck:
         # Assert — returned, not raised; the engine will mark UNHEALTHY and skip
         assert result.healthy is False
         assert "Unexpected server error" in (result.exception or "")
+
+    def test_health_output_redacts_capability_values(self, claude_token, health_timeout, caplog):
+        # Arrange
+        secret = 'health"secret'
+        profile = CapabilityProfile(
+            mcp_servers=(
+                {
+                    "name": "server",
+                    "type": "stdio",
+                    "command": "server",
+                    "env": {"TOKEN": secret},
+                },
+            )
+        )
+        client = _fake_exec_run_client((2, f"health failed: {secret}".encode()))
+        client._container.stop.side_effect = RuntimeError(f"stop failed: {secret}")
+        runner = DockerRunner(AgentType.CLAUDE_CODE, "model", capability_profile=profile)
+
+        # Act / Assert
+        with caplog.at_level(logging.INFO, logger="src.docker_runner"):
+            with mock.patch("src.docker_runner.docker.from_env", return_value=client):
+                with pytest.raises(RuntimeError) as error:
+                    runner.health_check("img")
+        assert secret not in str(error.value)
+        assert secret not in caplog.text
 
     def test_nonzero_exit_raises_runtimeerror_not_unhealthy(self, claude_token, health_timeout):
         # Arrange — a real in-container crash (import error, asyncio panic). This

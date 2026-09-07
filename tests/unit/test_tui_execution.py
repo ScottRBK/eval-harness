@@ -66,6 +66,38 @@ def test_select_eval_config_returns_when_no_configs(tmp_path, eval_configs):
     wait_for_selection.assert_not_called()
 
 
+def test_live_status_reports_agent_variant():
+    # Arrange
+    agent = AgentConfig(
+        agent_type=AgentType.PI,
+        agent_model="test-model",
+        agent_id="pi-with-tools",
+        capability_profile="pi-tools",
+    )
+    eval_exec = EvalExecution(
+        id=uuid4(),
+        eval=Eval(number=1, eval_dir="eval", description="eval", run_count=1, tags=[]),
+        agent_config=agent,
+    )
+    agent_exec = AgentEvalExecution(
+        agent_config=agent,
+        total_score=0,
+        total_tokens=0,
+        total_time_taken_seconds=0,
+        evals_executions=[eval_exec],
+        status=AgentEvalStatus.PENDING,
+    )
+    output = StringIO()
+    console = Console(file=output, force_terminal=False, width=120)
+
+    # Act
+    console.print(LiveStatus([agent_exec])._render())
+
+    # Assert
+    assert "pi-with-tools" in output.getvalue()
+    assert "pi-tools" in output.getvalue()
+
+
 def test_live_status_reports_eval_retry_progress():
     # Arrange
     agent = AgentConfig(

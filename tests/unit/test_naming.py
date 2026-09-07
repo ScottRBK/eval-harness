@@ -7,7 +7,7 @@ both a Docker container name and a log filename.
 
 import pytest
 
-from src.helpers.naming import safe_name
+from src.helpers.naming import agent_identity, safe_name
 
 
 class TestSafeName:
@@ -37,3 +37,8 @@ class TestSafeName:
 
         # Docker container names must match this pattern.
         assert re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*", safe_name(raw))
+
+    def test_agent_identity_is_shared_and_safe(self):
+        assert agent_identity("pi", "provider/model", "high", "tools") == (
+            "pi_provider_model_high_tools"
+        )

@@ -14,17 +14,15 @@ from pathlib import Path
 from contextlib import contextmanager
 
 from src.config.settings import settings
-from src.helpers.naming import safe_name
+from src.helpers.naming import agent_identity, safe_name
 
 _FMT = logging.Formatter("%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s")
 
 
 def agent_label(cfg) -> str:
     """Stable per-agent label used for both routing and the log filename."""
-    parts = [cfg.agent_type.value, cfg.agent_model]
-    if cfg.effort:
-        parts.append(cfg.effort)
-    return "_".join(parts)
+    variant = cfg.agent_id or (None if cfg.capability_profile == "base" else cfg.capability_profile)
+    return agent_identity(cfg.agent_type, cfg.agent_model, cfg.effort, variant)
 
 
 @contextmanager

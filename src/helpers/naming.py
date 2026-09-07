@@ -15,3 +15,19 @@ def safe_name(s: str) -> str:
     stray character is handled too - no per-character whack-a-mole.
     """
     return _DISALLOWED.sub("_", s)
+
+
+def agent_identity(
+    agent_type: object,
+    agent_model: str,
+    effort: str | None = None,
+    variant: str | None = None,
+) -> str:
+    """Return the canonical safe identity shared by logs, diagnostics, and containers."""
+    agent_type_name = getattr(agent_type, "value", str(agent_type))
+    parts = [agent_type_name, agent_model]
+    if effort:
+        parts.append(effort)
+    if variant:
+        parts.append(variant)
+    return safe_name("_".join(parts))

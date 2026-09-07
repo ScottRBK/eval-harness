@@ -32,6 +32,8 @@ prefixed with `EVAL_HARNESS_`
 |`EVALS_DIRS`|string|os.pathsep-separated list of directories searched, in order, for evals; each eval is `<dir>/<eval_dir>/eval.py`. Directories may live outside the repo and the first match wins (`:` on Linux/macOS, `;` on Windows)|`example_evals`|
 |`EVAL_CONFIG_DIR`|string|Directory of JSON evaluation configuration files listed by the interactive TUI|`eval_configs`|
 |`MAX_AGENT_CONCURRENCY`|int|Maximum number of processing chains run in parallel. An ungrouped agent is its own chain; each processing group is a single chain|`4`|
+|`HEALTH_CHECK_TIMEOUT_SECONDS`|int|Timeout for the model health check, in seconds|`180`|
+|`CAPABILITY_SETUP_TIMEOUT_SECONDS`|int|Capability install/configure timeout (seconds)|`600`|
 |`ARRANGE_TIMEOUT_SECONDS`|int|Timeout for the arrange phase of each eval, in seconds|`3600`|
 |`ACT_TIMEOUT_SECONDS`|int|Timeout for the act phase of each eval, in seconds|`3600`|
 |`SCORE_TIMEOUT_SECONDS`|int|Timeout for the score phase of each eval, in seconds|`600`|
@@ -69,7 +71,8 @@ for configurations you create:
 
 Headless runs require a configuration file to be supplied with `--eval_file`.
 
-An evaluation file contains two lists - `evals` and `agents`
+An evaluation file contains two required lists - `evals` and `agents` - and an optional
+`capability_profiles` object.
 
 ### Evals Configuration 
 Each entry in `evals` selects one evaluation from the eval roots (`EVALS_DIRS`, default
@@ -105,6 +108,8 @@ the file.
 |-----|----|-----------|-------|
 |`agent_type`|string|The CLI agent to run. One of `claude_code`, `opencode`, `copilot_cli`, `codex`, `pi`, `cursor`, `grok` (`gemini_cli` is not yet implemented)|`opencode`|
 |`agent_model`|string|Model identifier for the agent. Agent-specific: `haiku`/`sonnet`/`opus` for `claude_code`; a `provider/model` from the OpenCode config for `opencode`; or Pi's provider/model identifier, such as `openai-codex/gpt-5.4-mini`|`llama.cpp ai/qwen3.6-27b-8Q`|
+|`id`|string|Optional variant label (results, logs, and container names)|`pi-qwen-base`|
+|`capability_profile`|string|Profile name; defaults to the empty `base` profile|`pi-with-extension`|
 |`effort`|string|Optional — reasoning-effort level passed to the agent at runtime via the `AGENT_EFFORT` env var (`claude_code` applies it as `--effort`; Pi maps it to `--thinking`; `opencode` currently accepts but ignores it). Also appended to the agent's log filename and recorded in the results (`agent_effort`), so agents sharing a type and model stay distinguishable|`high`|
 |`processing_group`|string|Optional — agents sharing a group run serially, never concurrently. Ungrouped agents and separate groups run in parallel up to `MAX_AGENT_CONCURRENCY`. Use it to pin agents that share a backend such as a single inference server|`bosman-server`|
 |`eval_retries`|int|Optional — number of times to retry a failed eval run. Defaults to `0`. Every retry uses a fresh container and reruns `arrange`, `act`, and `score`, regardless of where or why the previous attempt failed|`1`|
@@ -130,6 +135,75 @@ Pi has no native MCP support, so do not include it in MCP-backed evaluations suc
 `encode_repo_forgetful`. Cursor MCP add/remove/list works via AgentShell (it edits
 `~/.cursor/mcp.json`); Cursor still has no per-call `disallowed_tools` (tool policy lives in
 `.cursor/cli.json`).
+
+### Capability profiles
+
+Capability profiles let the same eval run against a baseline agent and an agent with extra
+capabilities. The harness creates a fresh container for every eval attempt, then applies the
+selected profile before `arrange` runs, so packages and MCP configuration do not leak between
+agents or retries. Profiles are additive: the empty `base` profile does not remove capabilities
+already supplied by the image or by the eval itself. The private setup payload is cleared before
+`arrange` starts; adapter configuration may still retain credentials needed to use the capability.
+Results include a secret-free capability manifest so the tested treatment remains identifiable if the
+configuration later changes.
+
+```json
+{
+    "capability_profiles": {
+        "base": {},
+        "pi-with-extension": {
+            "packages": ["npm:published-extension@1.2.3"]
+        },
+        "opencode-with-mcp": {
+            "mcp_servers": [
+                {
+                    "name": "forgetful",
+                    "type": "stdio",
+                    "command": "uvx",
+                    "args": ["forgetful-ai"]
+                }
+            ]
+        }
+    },
+    "agents": [
+        {
+            "id": "pi-base",
+            "agent_type": "pi",
+            "agent_model": "provider/model",
+            "capability_profile": "base"
+        },
+        {
+            "id": "pi-extension",
+            "agent_type": "pi",
+            "agent_model": "provider/model",
+            "capability_profile": "pi-with-extension"
+        },
+        {
+            "id": "opencode-mcp",
+            "agent_type": "opencode",
+            "agent_model": "provider/model",
+            "capability_profile": "opencode-with-mcp"
+        }
+    ]
+}
+```
+
+`packages` use AgentShell's package sources. For Pi, npm installs must use an exact version
+and each npm package or Git repository may appear only once; Git installs must use an explicit
+ref, such as `npm:my-extension@1.2.3` or `git:https://github.com/org/extension@v1.0.0`; prefer
+an immutable commit ref for release runs. Git package URLs cannot contain credentials; use an
+image-provided credential helper or an explicitly prepared local package instead. Audit the package
+and its transitive dependencies before allowing it
+to run with container credentials. A local package path must already exist inside
+the image; an eval's `arrange` phase is too late to provide it. Pi package profiles require
+`agent-shell-py` 0.4.0 or newer; custom eval images using profiles must provide it too. MCP
+profiles use AgentShell's MCP support and are not currently supported for Pi. HTTP MCP URLs
+must be valid `http`/`https` endpoints, although reachability is checked only when the server is
+used. Codex MCP profiles can use stdio or headerless HTTP servers, but Codex does not support
+arbitrary HTTP headers. Profile secrets in `env` and `headers` are used only inside the container
+and are not copied into results; MCP argument values are represented by a count and hash instead.
+Private credential/configuration mounts require the host user UID to match the image's `node` UID
+(1000 in the supplied image); a mismatch fails before execution rather than producing a broken run.
 
 ### Running with the TUI
 Start the application without arguments to open the interactive menu:

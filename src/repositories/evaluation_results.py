@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 CSV_FIELDNAMES = [
     "agent_type",
     "agent_model",
+    "agent_id",
+    "capability_profile",
+    "agent_capability_manifest",
     "agent_effort",
     "agent_eval_retries",
     "agent_status",
@@ -47,6 +50,8 @@ def _serialize_cell(value: Any) -> Any:
         return str(value)
     if isinstance(value, datetime):
         return value.isoformat()
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, sort_keys=True)
     return value
 
 
@@ -111,6 +116,13 @@ class CsvEvaluationResultsRepository:
                             {
                                 "agent_type": _serialize_cell(aee.agent_config.agent_type),
                                 "agent_model": _serialize_cell(aee.agent_config.agent_model),
+                                "agent_id": _serialize_cell(aee.agent_config.agent_id),
+                                "capability_profile": _serialize_cell(
+                                    aee.agent_config.capability_profile
+                                ),
+                                "agent_capability_manifest": _serialize_cell(
+                                    aee.agent_config.capability_manifest
+                                ),
                                 "agent_effort": _serialize_cell(aee.agent_config.effort),
                                 "agent_eval_retries": _serialize_cell(
                                     aee.agent_config.eval_retries

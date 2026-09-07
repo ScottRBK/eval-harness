@@ -44,8 +44,20 @@ def run_dir(tmp_path):
     return tmp_path / "run"
 
 
-def _cfg(agent_type=AgentType.CLAUDE_CODE, agent_model="haiku", effort=None):
-    return AgentConfig(agent_type=agent_type, agent_model=agent_model, effort=effort)
+def _cfg(
+    agent_type=AgentType.CLAUDE_CODE,
+    agent_model="haiku",
+    effort=None,
+    agent_id=None,
+    capability_profile="base",
+):
+    return AgentConfig(
+        agent_type=agent_type,
+        agent_model=agent_model,
+        effort=effort,
+        agent_id=agent_id,
+        capability_profile=capability_profile,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -59,6 +71,12 @@ class TestAgentLabel:
 
     def test_includes_effort_when_present(self):
         assert agent_label(_cfg(agent_model="gpt5", effort="high")) == "claude_code_gpt5_high"
+
+    def test_includes_agent_id_when_present(self):
+        assert agent_label(_cfg(agent_id="pi-with-tools")) == "claude_code_haiku_pi-with-tools"
+
+    def test_uses_capability_profile_when_agent_id_is_absent(self):
+        assert agent_label(_cfg(capability_profile="pi-tools")) == "claude_code_haiku_pi-tools"
 
 
 # --------------------------------------------------------------------------- #
