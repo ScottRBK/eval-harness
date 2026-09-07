@@ -1509,6 +1509,24 @@ class TestBundledEvalsLoad:
         assert "input=TESTS" in script
         assert "_eval_hidden_tests.py" not in script
 
+    def test_repair_nginx_service_act_preserves_daemons_for_score(self, monkeypatch):
+        # Arrange
+        repo_root = Path(__file__).resolve().parents[2]
+        monkeypatch.setattr(
+            settings,
+            "EVALS_DIRS",
+            str(repo_root / "example_evals"),
+            raising=False,
+        )
+        cls = _load_eval_class("repair_nginx_service")
+
+        # Act
+        script = _method_to_script(cls.act)
+
+        # Assert — Nginx started by the agent must survive into the score phase.
+        assert "from agent_shell.execution import NoIsolation" in script
+        assert "isolation_policy=NoIsolation()" in script
+
 
 # --------------------------------------------------------------------------- #
 # G. run_session — processing groups (serialise within a group, parallel across)

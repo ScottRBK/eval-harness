@@ -48,10 +48,15 @@ class RepairNginxService:
 
     async def act(self) -> None:
         import os
+        from agent_shell.execution import NoIsolation
         from agent_shell.shell import AgentShell
         from agent_shell.models.agent import AgentType
 
-        shell = AgentShell(agent_type=AgentType(os.environ["AGENT_TYPE"]))
+        # This task starts Nginx during act(); keep its daemon alive for score().
+        shell = AgentShell(
+            agent_type=AgentType(os.environ["AGENT_TYPE"]),
+            isolation_policy=NoIsolation(),
+        )
 
         print("calling agent for repair_nginx_service")
         response = await shell.execute(
