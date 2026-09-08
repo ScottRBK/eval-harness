@@ -45,8 +45,10 @@ Before evals run, each agent/model is gated by a health check (`DockerRunner.hea
 
 The harness passes `AGENT_TYPE` and `AGENT_MODEL` to the container via env vars; `act()` reads them
 and builds an `AgentShell` from `agent_shell` (the unified CLI-agent wrapper installed in the image).
-Credential/configuration files are staged privately; the supplied image runs `node` as UID 1000,
-so a different host UID is rejected before a private bind mount can produce an unreadable run.
+Credential/configuration files are copied into temporary cross-UID bind mounts. The supplied image
+runs `node` as UID 1000, but the host UID may differ; these short-lived staging copies therefore use
+world-traversable directories and world-readable files, with writable directories for agent updates.
+They rely on the host being trusted and are removed after each attempt.
 `EVAL_HARNESS_AGENT_PID_NAMESPACE_ISOLATION=true` applies AgentShell PID-namespace isolation to
 health checks and evals without requiring changes to individual evals. It also runs those containers
 with `seccomp=unconfined`; the security trade-off is documented in `docs/config.md`.

@@ -181,7 +181,7 @@ class TestStagedMount:
         assert spec == {"bind": "/container/dir", "mode": "rw"}
         assert (Path(staging) / "auth.json").read_text() == "secret"
 
-    def test_sets_private_mode_on_copied_files(self, tmp_path):
+    def test_sets_cross_uid_readable_mode_on_copied_files(self, tmp_path):
         # Arrange
         runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
         source = tmp_path / "auth.json"
@@ -191,10 +191,10 @@ class TestStagedMount:
         # Act
         volumes = runner._staged_mount([source], "/container/dir")
 
-        # Assert
+        # Assert — bind mounts must work when host and container UIDs differ.
         staging = Path(next(iter(volumes)))
-        mode = stat.S_IMODE((staging / "auth.json").stat().st_mode)
-        assert mode == 0o600
+        assert stat.S_IMODE(staging.stat().st_mode) == 0o777
+        assert stat.S_IMODE((staging / "auth.json").stat().st_mode) == 0o644
 
     def test_tracks_staging_dir_for_cleanup(self, tmp_path):
         # Arrange
@@ -228,16 +228,20 @@ class TestStagedMount:
         assert len(runner._temp_dirs) == 1
         assert runner._temp_dirs[0].is_dir()
 
-    def test_private_mounts_reject_unaligned_host_uid(self, monkeypatch, tmp_path):
+    def test_cross_uid_mounts_allow_unaligned_host_uid(self, monkeypatch, tmp_path):
         # Arrange
         source = tmp_path / "auth.json"
         source.write_text("secret")
         runner = DockerRunner(AgentType.CLAUDE_CODE, "model")
         monkeypatch.setattr("src.docker_runner.os.getuid", lambda: 2000)
 
-        # Act / Assert
-        with pytest.raises(RuntimeError, match=r"UID.*1000"):
-            runner._staged_mount([source], "/container/dir")
+        # Act
+        volumes = runner._staged_mount([source], "/container/dir")
+
+        # Assert — CI runners do not have to use the image's UID.
+        staging = Path(next(iter(volumes)))
+        assert stat.S_IMODE(staging.stat().st_mode) == 0o777
+        assert stat.S_IMODE((staging / "auth.json").stat().st_mode) == 0o644
 
     def test_leaves_source_files_untouched(self, tmp_path):
         # Arrange
@@ -671,12 +675,12 @@ class TestDockerRun:
                 with pytest.raises(RuntimeError, match="capabilities failed"):
                     runner.docker_run("a", "b", "c", "img")
 
-        # The profile is delivered through a private temporary mount, not the
+        # The profile is delivered through a temporary cross-UID mount, not the
         # Docker exec command or host logs. It is removed during teardown.
         command = client.api.exec_create.call_args.args[1]
         assert secret not in command[-1]
         assert captured["payload"]["mcp_servers"][0]["env"]["TOKEN"] == secret
-        assert captured["mode"] == 0o600
+        assert captured["mode"] == 0o644
         capability_mount = next(
             spec
             for source, spec in client.containers.run.call_args.kwargs["volumes"].items()

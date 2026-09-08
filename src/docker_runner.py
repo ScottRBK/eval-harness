@@ -26,7 +26,6 @@ _AGENT_SHELL_ISOLATION_ENV = "AGENTSHELL_ISOLATION_POLICY"
 _PID_NAMESPACE_ISOLATION = "linux-pid-namespace"
 _CAPABILITY_SPEC_PATH = "/tmp/eval-harness-capabilities.json"  # noqa: S108 - container path
 _CAPABILITY_TIMEOUT_ENV = "CAPABILITY_SETUP_TIMEOUT_SECONDS"
-_CONTAINER_NODE_UID = 1000
 
 
 def _agent_isolation_environment() -> dict[str, str]:
@@ -182,23 +181,13 @@ class DockerRunner:
             return ()
         return self._capability_profile.redaction_values()
 
-    @staticmethod
-    def _ensure_private_mount_uid() -> None:
-        """Fail clearly rather than bind private files unreadable by container user node."""
-        getuid = getattr(os, "getuid", None)
-        if getuid is not None and getuid() != _CONTAINER_NODE_UID:
-            raise RuntimeError(
-                "Private Docker mounts require host UID "
-                f"{_CONTAINER_NODE_UID}, matching the image's node user"
-            )
-
     def _stage_capability_profile(self) -> dict[str, dict[str, str]]:
         if self._capability_profile is None or self._capability_profile.is_empty:
             return {}
-        self._ensure_private_mount_uid()
         staging = Path(tempfile.mkdtemp(prefix="eval-capabilities-"))
         self._temp_dirs.append(staging)
-        os.chmod(staging, 0o700)
+        # Bind mounts preserve host ownership, so use cross-UID permissions.
+        os.chmod(staging, 0o777)  # noqa: S103 - required for cross-UID Docker binds
         spec = staging / "capabilities.json"
         spec.write_text(
             json.dumps(
@@ -209,7 +198,7 @@ class DockerRunner:
             ),
             encoding="utf-8",
         )
-        os.chmod(spec, 0o600)
+        os.chmod(spec, 0o644)
         return {str(spec): {"bind": _CAPABILITY_SPEC_PATH, "mode": "rw"}}
 
     def _staged_mount(self, files: list[Path], container_dir: str) -> dict[str, dict[str, str]]:
@@ -220,15 +209,13 @@ class DockerRunner:
         secrets and the version-controlled repo config) are copies, so they are
         never touched. The temp dir is tracked so the run can delete it after.
         """
-        self._ensure_private_mount_uid()
         staging = Path(tempfile.mkdtemp(prefix="eval-mount-"))
         self._temp_dirs.append(staging)
-        # The base image runs as the same UID as the host user. Keep staged
-        # credentials/configuration private while still allowing that user to read them.
-        os.chmod(staging, 0o700)
+        # Bind mounts preserve host ownership, so use cross-UID permissions.
+        os.chmod(staging, 0o777)  # noqa: S103 - required for cross-UID Docker binds
         for source in files:
             shutil.copy2(source, staging / source.name)
-            os.chmod(staging / source.name, 0o600)
+            os.chmod(staging / source.name, 0o644)
 
         return {str(staging): {"bind": container_dir, "mode": "rw"}}
 
@@ -241,15 +228,14 @@ class DockerRunner:
         """Bind individual files so image-provided sibling files remain visible."""
         if target_names is not None and len(target_names) != len(files):
             raise ValueError("target_names must match files")
-        self._ensure_private_mount_uid()
         staging = Path(tempfile.mkdtemp(prefix="eval-mount-"))
         self._temp_dirs.append(staging)
-        os.chmod(staging, 0o700)
+        os.chmod(staging, 0o777)  # noqa: S103 - required for cross-UID Docker binds
         mounts = {}
         for index, source in enumerate(files):
             staged = staging / source.name
             shutil.copy2(source, staged)
-            os.chmod(staged, 0o600)
+            os.chmod(staged, 0o644)
             target_name = target_names[index] if target_names is not None else source.name
             target = f"{container_dir.rstrip('/')}/{target_name}"
             mounts[str(staged)] = {"bind": target, "mode": "rw"}
